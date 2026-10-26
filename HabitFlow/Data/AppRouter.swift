@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import SwiftData
 
 /// Переходы между экранами из любого места: Siri, быстрые действия, ссылки, уведомления.
 @MainActor
@@ -57,6 +58,32 @@ final class AppRouter {
             }
             tab = .progress
             showFriends = true
+        case "debug":
+            // Только для снимков экрана в CI (запуск с -hfShot).
+            guard UserDefaults.standard.string(forKey: "hfShot") != nil else { return }
+            debug(url.path)
+        default: break
+        }
+    }
+
+    private func debug(_ path: String) {
+        let mgr = CompanionManager.shared
+        switch path {
+        case "/hatch":
+            mgr.levelUp = LevelUpEvent(level: 2, gifts: [], hatched: true, stageChanged: .baby)
+        case "/levelup":
+            mgr.levelUp = LevelUpEvent(level: 10, gifts: GiftCatalog.gifts(at: 10), hatched: false, stageChanged: .adult)
+        case "/resist":
+            let ctx = TestMode.shared.data?.container.mainContext
+            if let h = ((try? ctx?.fetch(FetchDescriptor<Habit>())) ?? []).first(where: { $0.kind == .quit }) {
+                mgr.showResist(h, xp: 5)
+            }
+        case "/chat":
+            CoachChat.shared.messages = [
+                AI.Message(role: "user", text: "Мне тяжело держаться"),
+                AI.Message(role: "assistant", text: "Понимаю, Андрей. Ты уже 3 часа без сигарет — это настоящий шаг. Когда накатывает, попробуй 5 минут прогулки или стакан воды: тяга обычно отступает за пару минут."),
+            ]
+            chat(about: nil)
         default: break
         }
     }

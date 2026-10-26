@@ -228,13 +228,14 @@ final class SyncEngine {
         UserDefaults.standard.set(userEmail, forKey: "hf.userEmail")
         // Всё, что было сделано до входа или под другим аккаунтом, отправляем в этот аккаунт.
         if previous != newID { markEverythingDirty() }
-        if CompanionManager.shared.state.userName.isEmpty, let first = name.split(separator: " ").first {
-            CompanionManager.shared.state.userName = String(first)
-        }
         state = .idle
         await checkModule()
         await refreshAIStatus()
         await sync()
+        // Имя для обращения берём из аккаунта — уже после загрузки, чтобы не затереть настройки с другого устройства.
+        if CompanionManager.shared.state.userName.isEmpty, let first = name.split(separator: " ").first {
+            CompanionManager.shared.state.userName = String(first)
+        }
     }
 
     func refreshAIStatus() async {

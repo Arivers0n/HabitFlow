@@ -49,10 +49,11 @@ enum PrefSync {
         return out
     }
 
+    /// После входа: отправляем только то, что на этом устройстве действительно меняли.
+    /// Нетронутые настройки свежей установки не должны затереть настройки с другого телефона.
     static func markAllDirty() {
         ensureRegistered()
-        for key in groups.keys {
-            if mtime(key) == 0 { UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "prefs.mtime.\(key)") }
+        for key in groups.keys where mtime(key) > 0 {
             UserDefaults.standard.set(true, forKey: "prefs.dirty.\(key)")
         }
     }

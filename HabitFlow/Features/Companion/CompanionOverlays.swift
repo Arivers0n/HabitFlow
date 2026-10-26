@@ -18,6 +18,7 @@ struct LevelUpView: View {
         var config = SceneConfig.from(status)
         config.mood = .happy
         config.isNight = false
+        if event.hatched && config.stage == .egg { config.stage = .baby }
         return ZStack {
             Rectangle().fill(.black.opacity(0.6)).ignoresSafeArea().onTapGesture { if !waitingHatch { onClose() } }
             if Motion.enabled && !waitingHatch {

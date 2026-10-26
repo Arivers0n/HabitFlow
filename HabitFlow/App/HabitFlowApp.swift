@@ -84,6 +84,10 @@ struct HabitFlowApp: App {
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @State private var testMode = TestMode.shared
 
+    init() {
+        TestMode.applyLaunchScenario()
+    }
+
     var body: some Scene {
         WindowGroup {
             if let test = testMode.data {
@@ -92,6 +96,7 @@ struct HabitFlowApp: App {
                     .modelContainer(test.container)
                     .id("test")
                     .safeAreaInset(edge: .top, spacing: 0) { TestModeBanner() }
+                    .onOpenURL { AppRouter.shared.handle(url: $0) }
             } else {
                 RootView()
                     .environment(AppData.shared.store)

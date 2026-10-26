@@ -18,11 +18,12 @@ final class TestMode {
 
     private init() {}
 
-    func enter() {
+    /// Сценарии: stress — худшие данные; egg — напарник ещё в яйце (для снимков экрана в CI).
+    func enter(scenario: String = "stress") {
         let schema = Schema([Habit.self, CheckIn.self, Relapse.self, Resist.self])
         guard let c = try? ModelContainer(for: schema, configurations: ModelConfiguration(isStoredInMemoryOnly: true)) else { return }
         let store = HabitStore(context: c.mainContext, isTest: true)
-        Self.seed(c.mainContext)
+        if scenario == "egg" { Self.seedEgg(c.mainContext) } else { Self.seed(c.mainContext) }
         data = Session(container: c, store: store)
         AppRouter.shared.tab = .today
         Haptics.success()
@@ -32,6 +33,38 @@ final class TestMode {
         data = nil
         AppRouter.shared.tab = .settings
         Haptics.tap()
+    }
+
+    /// Одна привычка, отмеченная сегодня: 40 XP — яйцо уже с первой трещиной.
+    private static func seedEgg(_ ctx: ModelContext) {
+        let h = Habit(name: "Вода", kind: .build)
+        h.symbol = "drop.fill"
+        h.colorHex = "5AC8FA"
+        h.goalTarget = 2000; h.goalUnit = "мл"; h.goalStep = 250
+        ctx.insert(h)
+        let c = CheckIn(date: .now, value: 2000)
+        ctx.insert(c); c.habit = h
+        let q = Habit(name: "Курение", kind: .quit)
+        q.symbol = "smoke.fill"; q.colorHex = "FF453A"; q.unitName = "сигарет"
+        q.startDate = Date.now.addingTimeInterval(-3 * 3600)
+        ctx.insert(q)
+        try? ctx.save()
+    }
+
+    /// Снимки экрана в CI: `-hfShot egg|stress` при запуске.
+    static func applyLaunchScenario() {
+        guard let scenario = UserDefaults.standard.string(forKey: "hfShot"), !scenario.isEmpty else { return }
+        let mgr = CompanionManager.shared
+        if mgr.state.characterID == nil {
+            mgr.state.characterID = UserDefaults.standard.string(forKey: "hfShotCharacter") ?? "dragon"
+            mgr.state.nickname = mgr.character?.name ?? ""
+            mgr.state.userName = "Андрей"
+            mgr.state.onboardingDone = true
+            mgr.state.treats = 3
+            mgr.state.lastSeenLevel = 50
+        }
+        UserDefaults.standard.set(true, forKey: "hf.welcomeDone")
+        shared.enter(scenario: scenario)
     }
 
     private static func seed(_ ctx: ModelContext) {
