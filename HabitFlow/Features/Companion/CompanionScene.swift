@@ -13,7 +13,8 @@ struct SceneConfig: Equatable {
     var showIsland = true
 
     @MainActor
-    static func from(_ s: CompanionStatus, manager: CompanionManager = .shared) -> SceneConfig {
+    static func from(_ s: CompanionStatus) -> SceneConfig {
+        let manager = CompanionManager.shared
         SceneConfig(character: s.character, stage: s.stage, mood: s.mood, isNight: s.isNight,
                     eggProgress: s.stage == .egg ? s.progress.fraction : 0,
                     headwear: s.stage == .egg ? nil : manager.state.headwear,
@@ -37,74 +38,10 @@ struct CompanionScene: View {
     private var tint: Color { Color(hex: config.character.tintHex) }
 
     var body: some View {
-        let W = size, H = size * 0.92
         TimelineView(.animation(minimumInterval: 1 / 45, paused: !Motion.enabled)) { ctx in
-            let t = ctx.date.timeIntervalSinceReferenceDate
-            let g = SceneGeometry(W: W, H: H, stage: config.stage, aspect: config.character.aspect)
-            let m = motion(t: t, now: ctx.date, g: g)
-
-            ZStack {
-                // Свечение за персонажем
-                Circle()
-                    .fill(RadialGradient(colors: [glowColor.opacity(config.mood == .sad ? 0.22 : 0.45), glowColor.opacity(0)],
-                                         center: .center, startRadius: 0, endRadius: W * 0.5))
-                    .frame(width: W, height: W)
-                    .scaleEffect(1 + 0.04 * sin(t * 0.9))
-                    .position(x: W / 2, y: g.charCenterY - g.charH * 0.05)
-
-                if config.decor.contains("moon") {
-                    SkyMoon(t: t).frame(width: W * 0.16, height: W * 0.16).position(x: W * 0.14, y: H * 0.14)
-                }
-                if config.aura == "rainbow" && config.stage != .egg {
-                    RainbowArc().frame(width: W * 0.82, height: W * 0.41)
-                        .opacity(0.55 + 0.15 * sin(t * 0.7))
-                        .position(x: W / 2, y: g.islandY - g.charH * 0.45)
-                }
-
-                if config.showIsland {
-                    Island(tint: tint, stage: config.stage)
-                        .frame(width: g.islandW, height: g.islandW * 0.5)
-                        .position(x: W / 2, y: g.islandY + g.islandW * 0.12)
-                    DecorLayer(decor: config.decor, back: true, g: g, t: t, mood: config.mood)
-                }
-
-                // Тень
-                Ellipse()
-                    .fill(Color.black.opacity(0.28))
-                    .frame(width: g.charW * 0.62 * (1 - m.lift * 0.35), height: g.islandW * 0.07)
-                    .blur(radius: 3)
-                    .position(x: W / 2, y: g.feetY)
-
-                AuraLayer(aura: config.aura, t: t, g: g, back: true)
-
-                // Персонаж
-                character(g: g, t: t)
-                    .scaleEffect(x: m.sx, y: m.sy, anchor: .bottom)
-                    .rotationEffect(.degrees(m.tilt), anchor: .bottom)
-                    .rotation3DEffect(.degrees(m.flip), axis: (x: 0, y: 1, z: 0))
-                    .saturation(config.mood == .sad ? 0.75 : 1)
-                    .brightness(config.mood == .sad ? -0.04 : 0)
-                    .position(x: W / 2, y: g.feetY - g.charH / 2 + m.dy)
-
-                AuraLayer(aura: config.aura, t: t, g: g, back: false)
-
-                if let hw = config.headwear {
-                    Headwear(id: hw, t: t)
-                        .frame(width: W * 0.15, height: W * 0.15)
-                        .position(x: W / 2 + (config.character.headX - 0.5) * g.charW,
-                                  y: g.feetY - g.charH + m.dy - W * 0.07 + 3 * sin(t * 2.1 + 1))
-                }
-
-                if config.showIsland {
-                    DecorLayer(decor: config.decor, back: false, g: g, t: t, mood: config.mood)
-                }
-
-                MoodEffects(mood: config.mood, isNight: config.isNight && config.mood != .caring,
-                            t: t, g: g, stage: config.stage)
-            }
-            .frame(width: W, height: H)
+            layers(t: ctx.date.timeIntervalSinceReferenceDate, now: ctx.date)
         }
-        .frame(width: W, height: H)
+        .frame(width: size, height: size * 0.92)
         .contentShape(Rectangle())
         .onTapGesture {
             guard interactive else { return }
@@ -119,6 +56,95 @@ struct CompanionScene: View {
         .accessibilityElement()
         .accessibilityLabel("\(config.character.name), \(config.mood.title.lowercased())")
         .accessibilityAddTraits(interactive ? .isButton : [])
+    }
+
+    private func layers(t: Double, now: Date) -> some View {
+        let W: CGFloat = size
+        let H: CGFloat = size * 0.92
+        let g = SceneGeometry(W: W, H: H, stage: config.stage, aspect: config.character.aspect)
+        let m = motion(t: t, now: now, g: g)
+        return ZStack {
+            backLayers(g: g, t: t)
+            shadow(g: g, m: m)
+            AuraLayer(aura: config.aura, t: t, g: g, back: true)
+            characterLayer(g: g, t: t, m: m)
+            AuraLayer(aura: config.aura, t: t, g: g, back: false)
+            headwearLayer(g: g, t: t, m: m)
+            if config.showIsland {
+                DecorLayer(decor: config.decor, back: false, g: g, t: t, mood: config.mood)
+            }
+            MoodEffects(mood: config.mood, isNight: config.isNight && config.mood != .caring,
+                        t: t, g: g, stage: config.stage)
+        }
+        .frame(width: W, height: H)
+    }
+
+    @ViewBuilder
+    private func backLayers(g: SceneGeometry, t: Double) -> some View {
+        let glowOpacity: Double = config.mood == .sad ? 0.22 : 0.45
+        let pulse: CGFloat = 1 + 0.04 * CGFloat(sin(t * 0.9))
+        let glowY: CGFloat = g.feetY - g.charH * 0.55
+        Circle()
+            .fill(RadialGradient(colors: [glowColor.opacity(glowOpacity), glowColor.opacity(0)],
+                                 center: .center, startRadius: 0, endRadius: g.W * 0.5))
+            .frame(width: g.W, height: g.W)
+            .scaleEffect(pulse)
+            .position(x: g.W / 2, y: glowY)
+
+        if config.decor.contains("moon") {
+            SkyMoon(t: t)
+                .frame(width: g.W * 0.16, height: g.W * 0.16)
+                .position(x: g.W * 0.14, y: g.H * 0.14)
+        }
+        if config.aura == "rainbow" && config.stage != .egg {
+            let rainbowY: CGFloat = g.islandY - g.charH * 0.45
+            RainbowArc()
+                .frame(width: g.W * 0.82, height: g.W * 0.41)
+                .opacity(0.55 + 0.15 * sin(t * 0.7))
+                .position(x: g.W / 2, y: rainbowY)
+        }
+        if config.showIsland {
+            let islandH: CGFloat = g.islandW * 0.5
+            let islandCenter: CGFloat = g.islandY + g.islandW * 0.12
+            Island(tint: tint, stage: config.stage)
+                .frame(width: g.islandW, height: islandH)
+                .position(x: g.W / 2, y: islandCenter)
+            DecorLayer(decor: config.decor, back: true, g: g, t: t, mood: config.mood)
+        }
+    }
+
+    private func shadow(g: SceneGeometry, m: Motion3) -> some View {
+        let w: CGFloat = g.charW * 0.62 * (1 - m.lift * 0.35)
+        let h: CGFloat = g.islandW * 0.07
+        return Ellipse()
+            .fill(Color.black.opacity(0.28))
+            .frame(width: w, height: h)
+            .blur(radius: 3)
+            .position(x: g.W / 2, y: g.feetY)
+    }
+
+    private func characterLayer(g: SceneGeometry, t: Double, m: Motion3) -> some View {
+        let sad = config.mood == .sad
+        let y: CGFloat = g.feetY - g.charH / 2 + m.dy
+        return character(g: g, t: t)
+            .scaleEffect(x: m.sx, y: m.sy, anchor: .bottom)
+            .rotationEffect(.degrees(m.tilt), anchor: .bottom)
+            .rotation3DEffect(.degrees(m.flip), axis: (x: 0, y: 1, z: 0))
+            .saturation(sad ? 0.75 : 1)
+            .brightness(sad ? -0.04 : 0)
+            .position(x: g.W / 2, y: y)
+    }
+
+    @ViewBuilder
+    private func headwearLayer(g: SceneGeometry, t: Double, m: Motion3) -> some View {
+        if let hw = config.headwear {
+            let x: CGFloat = g.W / 2 + CGFloat(config.character.headX - 0.5) * g.charW
+            let float: CGFloat = 3 * CGFloat(sin(t * 2.1 + 1))
+            let y: CGFloat = g.feetY - g.charH + m.dy - g.W * 0.07 + float
+            Headwear(id: hw, t: t)
+                .frame(width: g.W * 0.15, height: g.W * 0.15)
+                .position(x: x, y: y)
+        }
     }
 
     private var glowColor: Color {
@@ -513,7 +539,7 @@ private struct AuraLayer: View {
                             .foregroundStyle(Color(hex: "FFE27A"))
                             .shadow(color: .yellow, radius: 4)
                             .scaleEffect(0.7 + 0.3 * (sin(a) + 1) / 2)
-                            .position(x: cx + rx * cos(a), y: cy + ry * 0.35 * sin(a) - g.charH * 0.1)
+                            .position(orbit(cx: cx, cy: cy - g.charH * 0.1, rx: rx, ry: ry * 0.35, angle: a))
                     }
                 }
             case "fireflies" where !back:
@@ -524,8 +550,8 @@ private struct AuraLayer: View {
                         .frame(width: 4, height: 4)
                         .shadow(color: Color(hex: "D9FF8A"), radius: 4)
                         .opacity(0.4 + 0.6 * (sin(t * (1.3 + fi * 0.2) + fi) + 1) / 2)
-                        .position(x: cx + rx * 1.2 * sin(t * (0.3 + fi * 0.07) + fi * 1.7),
-                                  y: cy + ry * 1.1 * cos(t * (0.4 + fi * 0.05) + fi))
+                        .position(drift(cx: cx, cy: cy, rx: rx * 1.2, ry: ry * 1.1,
+                                        ax: t * (0.3 + fi * 0.07) + fi * 1.7, ay: t * (0.4 + fi * 0.05) + fi))
                 }
             case "hearts" where !back:
                 ForEach(0..<3, id: \.self) { i in
@@ -534,8 +560,8 @@ private struct AuraLayer: View {
                         .font(.system(size: g.W * 0.045))
                         .foregroundStyle(Color(hex: "FF6B9A"))
                         .opacity(sin(.pi * p))
-                        .position(x: cx + (i == 1 ? -1 : 1) * rx * 0.9 + 6 * sin(t * 2 + Double(i)),
-                                  y: cy + ry * 0.6 - p * g.charH * 0.7)
+                        .position(rise(x: cx + (i == 1 ? -rx * 0.9 : rx * 0.9), y: cy + ry * 0.6,
+                                       wobble: 6 * sin(t * 2 + Double(i)), height: g.charH * 0.7, p: p))
                 }
             default:
                 EmptyView()
@@ -604,7 +630,7 @@ private struct MoodEffects: View {
                         .font(.system(size: 10 + 8 * p, weight: .heavy, design: .rounded))
                         .foregroundStyle(Color(hex: "B9C6FF"))
                         .opacity(sin(.pi * p))
-                        .position(x: cx + g.charW * 0.35 + p * 22, y: top + 10 - p * 40)
+                        .position(rise(x: cx + g.charW * 0.35, y: top + 10, wobble: 22 * p, height: 40, p: p))
                 }
             } else {
                 switch mood {
@@ -617,7 +643,7 @@ private struct MoodEffects: View {
                             .foregroundStyle(Color(hex: "FFE27A"))
                             .shadow(color: .yellow, radius: 3)
                             .opacity(max(0, sin(t * 2.2 + fi * 1.3)))
-                            .position(x: cx + (g.charW * 0.7) * cos(a), y: top + g.charH * 0.35 + (g.charH * 0.45) * sin(a) * -1)
+                            .position(orbit(cx: cx, cy: top + g.charH * 0.35, rx: g.charW * 0.7, ry: -g.charH * 0.45, angle: a))
                     }
                 case .sad:
                     RainCloud(t: t)
@@ -630,7 +656,8 @@ private struct MoodEffects: View {
                             .font(.system(size: 12 + 4 * p))
                             .foregroundStyle(Color(hex: "FF8FB8"))
                             .opacity(sin(.pi * p))
-                            .position(x: cx - g.charW * 0.42 + 8 * sin(t * 2 + Double(i)), y: top + g.charH * 0.4 - p * 45)
+                            .position(rise(x: cx - g.charW * 0.42, y: top + g.charH * 0.4,
+                                           wobble: 8 * sin(t * 2 + Double(i)), height: 45, p: p))
                     }
                 case .calm:
                     EmptyView()
@@ -664,4 +691,19 @@ private struct RainCloud: View {
                 .offset(x: 2 * sin(t * 0.8))
         }
     }
+}
+
+
+// MARK: - Помощники координат (простые типы — быстрее для компилятора)
+
+func orbit(cx: CGFloat, cy: CGFloat, rx: CGFloat, ry: CGFloat, angle: Double) -> CGPoint {
+    CGPoint(x: cx + rx * CGFloat(cos(angle)), y: cy + ry * CGFloat(sin(angle)))
+}
+
+func drift(cx: CGFloat, cy: CGFloat, rx: CGFloat, ry: CGFloat, ax: Double, ay: Double) -> CGPoint {
+    CGPoint(x: cx + rx * CGFloat(sin(ax)), y: cy + ry * CGFloat(cos(ay)))
+}
+
+func rise(x: CGFloat, y: CGFloat, wobble: Double, height: CGFloat, p: Double) -> CGPoint {
+    CGPoint(x: x + CGFloat(wobble), y: y - CGFloat(p) * height)
 }

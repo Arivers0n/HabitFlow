@@ -230,34 +230,44 @@ struct ResistView: View {
 
     @ViewBuilder
     private func projectile(q: Double, from: CGPoint, to: CGPoint, t: Double) -> some View {
-        let active = q > 0 && q < 1
         switch power {
         case .laser:
+            let a = CGPoint(x: from.x + 40, y: from.y - 40)
+            let b = lerp(a, to, min(1, q * 1.6))
+            let width: CGFloat = 4 + 2 * CGFloat(sin(t * 40))
             Path { path in
-                path.move(to: CGPoint(x: from.x + 40, y: from.y - 40))
-                path.addLine(to: CGPoint(x: from.x + 40 + (to.x - from.x - 40) * min(1, q * 1.6), y: from.y - 40 + (to.y - from.y + 40) * min(1, q * 1.6)))
+                path.move(to: a)
+                path.addLine(to: b)
             }
             .stroke(LinearGradient(colors: [Color(hex: "5AD8FF"), Color(hex: "FF4D6D")], startPoint: .leading, endPoint: .trailing),
-                    style: StrokeStyle(lineWidth: 4 + 2 * sin(t * 40), lineCap: .round))
+                    style: StrokeStyle(lineWidth: width, lineCap: .round))
             .shadow(color: Color(hex: "FF4D6D"), radius: 8)
             .opacity(q > 0 && t < 1.3 ? 1 : 0)
         case .rocket, .poof, .light:
             EmptyView()
         default:
-            let look = projectileLook
             ForEach(0..<3, id: \.self) { i in
-                let lag = Double(i) * 0.12
-                let qi = clamp((q - lag) / (1 - lag))
-                Image(systemName: look.symbol)
-                    .font(.system(size: 26 - CGFloat(i) * 5, weight: .bold))
-                    .foregroundStyle(LinearGradient(colors: look.colors, startPoint: .top, endPoint: .bottom))
-                    .shadow(color: look.colors[1].opacity(0.7), radius: 6)
-                    .rotationEffect(.degrees(t * 200))
-                    .position(x: from.x + 50 + (to.x - from.x - 50) * qi,
-                              y: from.y - 30 + (to.y - from.y + 30) * qi - CGFloat(sin(.pi * qi)) * 30)
-                    .opacity(active && qi > 0 ? 1 : 0)
+                ProjectileDot(look: projectileLook, index: i, point: arcPoint(from: from, to: to, q: lagged(q, i)),
+                              visible: q > 0 && q < 1 && lagged(q, i) > 0, angle: t * 200)
             }
         }
+    }
+
+    private func lagged(_ q: Double, _ i: Int) -> Double {
+        let lag = Double(i) * 0.12
+        return clamp((q - lag) / (1 - lag))
+    }
+
+    private func lerp(_ a: CGPoint, _ b: CGPoint, _ k: Double) -> CGPoint {
+        let f = CGFloat(k)
+        return CGPoint(x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f)
+    }
+
+    private func arcPoint(from: CGPoint, to: CGPoint, q: Double) -> CGPoint {
+        let a = CGPoint(x: from.x + 50, y: from.y - 30)
+        let p = lerp(a, to, q)
+        let lift: CGFloat = CGFloat(sin(Double.pi * q)) * 30
+        return CGPoint(x: p.x, y: p.y - lift)
     }
 
     private var projectileLook: (symbol: String, colors: [Color]) {
@@ -271,6 +281,25 @@ struct ResistView: View {
     }
 
     private func clamp(_ v: Double) -> Double { min(1, max(0, v)) }
+}
+
+private struct ProjectileDot: View {
+    let look: (symbol: String, colors: [Color])
+    let index: Int
+    let point: CGPoint
+    let visible: Bool
+    let angle: Double
+
+    var body: some View {
+        let size: CGFloat = 26 - CGFloat(index) * 5
+        Image(systemName: look.symbol)
+            .font(.system(size: size, weight: .bold))
+            .foregroundStyle(LinearGradient(colors: look.colors, startPoint: .top, endPoint: .bottom))
+            .shadow(color: look.colors[1].opacity(0.7), radius: 6)
+            .rotationEffect(.degrees(angle))
+            .position(point)
+            .opacity(visible ? 1 : 0)
+    }
 }
 
 /// Частицы разрушения в стиле суперсилы.
