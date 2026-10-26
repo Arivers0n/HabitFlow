@@ -53,8 +53,8 @@ jobs:
       - name: Журнал приложения
         if: always()
         run: |
-          xcrun simctl spawn booted log show --last 6m --predicate 'process == "HabitFlow"' --style compact 2>/dev/null \
-            | grep -i -E "error|fault|shader|metal|crash|fatal" | head -80 || true
+          xcrun simctl spawn booted log show --last 12m --predicate 'process == "HabitFlow"' --style compact 2>/dev/null \
+            | grep -i -E "fault|shader|metal|crash|fatal|swiftui" | grep -v -i coredata | head -40 || true
 
       - uses: actions/upload-artifact@v4
         if: always()

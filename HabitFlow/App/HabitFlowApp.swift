@@ -179,6 +179,10 @@ struct RootView: View {
             if let level, !isTest { companion.checkLevel(level) }
         }
         .onAppear {
+            if isTest, let open = UserDefaults.standard.string(forKey: "hfOpen"), let url = URL(string: "habitflow://" + open) {
+                // Снимки экрана в CI: сразу открыть нужный экран (без системного вопроса про ссылку).
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { router.handle(url: url) }
+            }
             guard !isTest else { return }
             companion.registerOpen()
             if let level = status?.level { companion.checkLevel(level) }

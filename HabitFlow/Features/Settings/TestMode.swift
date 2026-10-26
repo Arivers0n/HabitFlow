@@ -24,6 +24,9 @@ final class TestMode {
         guard let c = try? ModelContainer(for: schema, configurations: ModelConfiguration(isStoredInMemoryOnly: true)) else { return }
         let store = HabitStore(context: c.mainContext, isTest: true)
         if scenario == "egg" { Self.seedEgg(c.mainContext) } else { Self.seed(c.mainContext) }
+        // В тестовых данных не показываем поздравления — они закрывают экран.
+        for h in (try? c.mainContext.fetch(FetchDescriptor<Habit>())) ?? [] { h.celebratedDays = 100_000 }
+        try? c.mainContext.save()
         data = Session(container: c, store: store)
         AppRouter.shared.tab = .today
         Haptics.success()

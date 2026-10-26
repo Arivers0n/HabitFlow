@@ -498,7 +498,7 @@ struct SceneGeometry {
         self.W = W
         self.H = H
         let islandScale: CGFloat = [0.7, 0.8, 0.9, 1.0][stage.rawValue]
-        let charScale: CGFloat = [0.5, 0.66, 0.82, 1.0][stage.rawValue]
+        let charScale: CGFloat = [0.72, 0.66, 0.82, 1.0][stage.rawValue]
         islandW = W * 0.86 * islandScale
         islandY = H * 0.8
         charH = H * 0.6 * charScale
