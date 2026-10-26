@@ -23,60 +23,113 @@ struct SceneConfig: Equatable {
     }
 }
 
+/// Как сцена отвечает на касания.
+enum SceneMode {
+    /// Только смотреть (онбординг, превью, окно срыва).
+    case display
+    /// Карточка на «Сегодня»: тап — прыжок и «желе». Не мешает прокрутке.
+    case card
+    /// Площадка напарника: гладить, щекотать, поднимать и бросать, кормить.
+    case full
+}
+
 /// Живая сцена: персонаж на стеклянном островке, свечение, украшения и эффекты настроения.
-/// Вся анимация считается от времени в TimelineView — без накапливающихся состояний,
+/// Вся анимация считается от времени в TimelineView, физика — в PetSim,
 /// поэтому ничего не «залипает» и не дёргается при перерисовке.
 struct CompanionScene: View {
     var config: SceneConfig
     var size: CGFloat
-    var interactive = true
-    var onTap: (() -> Void)? = nil
+    var mode: SceneMode
+    var feedToken: Int
+    var onTap: (() -> Void)?
+    var onEvent: ((PetEvent) -> Void)?
 
-    @State private var tapStart: Date?
-    @State private var tapCount = 0
+    init(config: SceneConfig, size: CGFloat, interactive: Bool = true, mode: SceneMode? = nil,
+         feedToken: Int = 0, onEvent: ((PetEvent) -> Void)? = nil, onTap: (() -> Void)? = nil) {
+        self.config = config
+        self.size = size
+        self.mode = mode ?? (interactive ? .card : .display)
+        self.feedToken = feedToken
+        self.onTap = onTap
+        self.onEvent = onEvent
+    }
+
+    @State private var sim = PetSim()
+    @State private var charRect = CGRect.zero
 
     private var tint: Color { Color(hex: config.character.tintHex) }
+    private var isEgg: Bool { config.stage == .egg }
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 45, paused: !Motion.enabled)) { ctx in
-            layers(t: ctx.date.timeIntervalSinceReferenceDate, now: ctx.date)
+        TimelineView(.animation(minimumInterval: 1 / 60, paused: !Motion.enabled)) { ctx in
+            layers(now: ctx.date)
         }
         .frame(width: size, height: size * 0.92)
         .contentShape(Rectangle())
-        .onTapGesture {
-            guard interactive else { return }
-            tapCount += 1
-            tapStart = .now
-            Haptics.tap()
-            if tapCount % 3 == 0 {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { Haptics.soft() }
-            }
-            onTap?()
+        .modifier(PetGestures(mode: isEgg ? .display : mode, sim: sim, charRect: { currentCharRect() }))
+        .onAppear {
+            MotionTracker.shared.start()
+            sim.onEvent = { e in handle(e) }
+        }
+        .onDisappear { MotionTracker.shared.stop() }
+        .onChange(of: feedToken) { _, _ in
+            sim.feed(["🍓", "🍎", "🍪", "🍌", "🫐", "🥕", "🍒"].randomElement() ?? "🍓")
         }
         .accessibilityElement()
         .accessibilityLabel("\(config.character.name), \(config.mood.title.lowercased())")
-        .accessibilityAddTraits(interactive ? .isButton : [])
+        .accessibilityAddTraits(mode == .display ? [] : .isButton)
+        .accessibilityAction { sim.tap(at: CGPoint(x: 0.5, y: 0.4), allowSpin: true) }
     }
 
-    private func layers(t: Double, now: Date) -> some View {
-        let W: CGFloat = size
-        let H: CGFloat = size * 0.92
-        let g = SceneGeometry(W: W, H: H, stage: config.stage, aspect: config.character.aspect)
+    private func handle(_ e: PetEvent) {
+        if e == .tap { onTap?() }
+        if e == .petted { CompanionManager.shared.petted() }
+        onEvent?(e)
+    }
+
+    private func geometry() -> SceneGeometry {
+        SceneGeometry(W: size, H: size * 0.92, stage: config.stage, aspect: config.character.aspect)
+    }
+
+    private func currentCharRect() -> CGRect {
+        let g = geometry()
+        return CGRect(x: g.W / 2 - g.charW / 2 + sim.offset.width,
+                      y: g.feetY - g.charH + sim.offset.height,
+                      width: g.charW, height: g.charH)
+    }
+
+    private func layers(now: Date) -> some View {
+        let t = now.timeIntervalSinceReferenceDate
+        let g = geometry()
+        sim.step(now, canHold: mode == .full && !isEgg,
+                 sleepy: mode == .full && !isEgg && (config.mood == .calm || config.mood == .happy))
+        let tilt = MotionTracker.shared.step(now)
         let m = motion(t: t, now: now, g: g)
+        let asleep = sim.asleep || (config.isNight && mode != .full && config.mood != .caring && config.mood != .sad)
         return ZStack {
             backLayers(g: g, t: t)
-            shadow(g: g, m: m)
-            AuraLayer(aura: config.aura, t: t, g: g, back: true)
-            characterLayer(g: g, t: t, m: m)
-            AuraLayer(aura: config.aura, t: t, g: g, back: false)
-            headwearLayer(g: g, t: t, m: m)
+                .offset(x: -tilt.x * 10, y: -tilt.y * 6)
+            Group {
+                if config.showIsland { islandLayer(g: g, t: t) }
+                shadow(g: g, m: m)
+            }
+            .offset(x: tilt.x * 4, y: tilt.y * 2)
+            Group {
+                AuraLayer(aura: config.aura, t: t, g: g, back: true)
+                characterLayer(g: g, t: t, m: m, now: now, tilt: tilt, asleep: asleep)
+                AuraLayer(aura: config.aura, t: t, g: g, back: false)
+                headwearLayer(g: g, t: t, m: m)
+            }
+            .offset(x: tilt.x * 8 + sim.offset.width + m.dx, y: tilt.y * 5 + sim.offset.height)
             if config.showIsland {
                 DecorLayer(decor: config.decor, back: false, g: g, t: t, mood: config.mood)
+                    .offset(x: tilt.x * 11, y: tilt.y * 7)
             }
-            MoodEffects(mood: config.mood, isNight: config.isNight && config.mood != .caring,
-                        t: t, g: g, stage: config.stage)
+            MoodEffects(mood: config.mood, isNight: asleep, t: t, g: g, stage: config.stage)
+                .offset(x: tilt.x * 8 + sim.offset.width, y: sim.offset.height)
+            PlayEffects(sim: sim, now: now, g: g, tint: tint)
         }
-        .frame(width: W, height: H)
+        .frame(width: g.W, height: g.H)
     }
 
     @ViewBuilder
@@ -96,53 +149,71 @@ struct CompanionScene: View {
                 .frame(width: g.W * 0.16, height: g.W * 0.16)
                 .position(x: g.W * 0.14, y: g.H * 0.14)
         }
-        if config.aura == "rainbow" && config.stage != .egg {
+        if config.aura == "rainbow" && !isEgg {
             let rainbowY: CGFloat = g.islandY - g.charH * 0.45
             RainbowArc()
                 .frame(width: g.W * 0.82, height: g.W * 0.41)
                 .opacity(0.55 + 0.15 * sin(t * 0.7))
                 .position(x: g.W / 2, y: rainbowY)
         }
-        if config.showIsland {
-            let islandH: CGFloat = g.islandW * 0.5
-            let islandCenter: CGFloat = g.islandY + g.islandW * 0.12
-            Island(tint: tint, stage: config.stage)
-                .frame(width: g.islandW, height: islandH)
-                .position(x: g.W / 2, y: islandCenter)
-            DecorLayer(decor: config.decor, back: true, g: g, t: t, mood: config.mood)
-        }
+    }
+
+    @ViewBuilder
+    private func islandLayer(g: SceneGeometry, t: Double) -> some View {
+        let islandH: CGFloat = g.islandW * 0.5
+        let islandCenter: CGFloat = g.islandY + g.islandW * 0.12
+        Island(tint: tint, stage: config.stage)
+            .frame(width: g.islandW, height: islandH)
+            .position(x: g.W / 2, y: islandCenter)
+        DecorLayer(decor: config.decor, back: true, g: g, t: t, mood: config.mood)
     }
 
     private func shadow(g: SceneGeometry, m: Motion3) -> some View {
-        let w: CGFloat = g.charW * 0.62 * (1 - m.lift * 0.35)
+        let lift = min(1, m.lift + max(0, -sim.offset.height) / 160)
+        let w: CGFloat = g.charW * 0.62 * (1 - lift * 0.45)
         let h: CGFloat = g.islandW * 0.07
         return Ellipse()
-            .fill(Color.black.opacity(0.28))
+            .fill(Color.black.opacity(0.28 * (1 - Double(lift) * 0.5)))
             .frame(width: w, height: h)
-            .blur(radius: 3)
-            .position(x: g.W / 2, y: g.feetY)
+            .blur(radius: 3 + lift * 3)
+            .position(x: g.W / 2 + sim.offset.width * 0.9, y: g.feetY)
     }
 
-    private func characterLayer(g: SceneGeometry, t: Double, m: Motion3) -> some View {
+    @ViewBuilder
+    private func characterLayer(g: SceneGeometry, t: Double, m: Motion3, now: Date, tilt: CGPoint, asleep: Bool) -> some View {
         let sad = config.mood == .sad
         let y: CGFloat = g.feetY - g.charH / 2 + m.dy
-        return character(g: g, t: t)
-            .scaleEffect(x: m.sx, y: m.sy, anchor: .bottom)
-            .rotationEffect(.degrees(m.tilt), anchor: .bottom)
-            .rotation3DEffect(.degrees(m.flip), axis: (x: 0, y: 1, z: 0))
-            .saturation(sad ? 0.75 : 1)
-            .brightness(sad ? -0.04 : 0)
-            .position(x: g.W / 2, y: y)
+        if isEgg {
+            let fill: CGFloat = 0.8
+            let side = g.charH / fill
+            let bottom = EggArt.bottomFraction(fill: fill)
+            Egg3DView(tintHex: config.character.tintHex, seed: config.character.id,
+                      progress: config.eggProgress, interactive: mode != .display, fill: fill)
+                .frame(width: side, height: side)
+                .position(x: g.W / 2, y: g.feetY - side * (0.5 - bottom))
+        } else {
+            PetBody(config: config, g: g, sim: sim, t: t, now: now, tilt: tilt, tint: tint,
+                    squashExtra: m.squash, asleep: asleep)
+                .scaleEffect(x: m.sx, y: m.sy, anchor: .bottom)
+                .rotationEffect(.degrees(m.tilt), anchor: .bottom)
+                .rotationEffect(.degrees(m.spin))
+                .rotation3DEffect(.degrees(Double(tilt.x) * 10), axis: (x: 0, y: 1, z: 0), perspective: 0.55)
+                .rotation3DEffect(.degrees(Double(-tilt.y) * 6), axis: (x: 1, y: 0, z: 0), perspective: 0.55)
+                .saturation(sad ? 0.75 : 1)
+                .brightness(sad ? -0.04 : (asleep ? -0.05 : 0))
+                .position(x: g.W / 2, y: y)
+        }
     }
 
     @ViewBuilder
     private func headwearLayer(g: SceneGeometry, t: Double, m: Motion3) -> some View {
-        if let hw = config.headwear {
+        if let hw = config.headwear, !isEgg {
             let x: CGFloat = g.W / 2 + CGFloat(config.character.headX - 0.5) * g.charW
             let float: CGFloat = 3 * CGFloat(sin(t * 2.1 + 1))
-            let y: CGFloat = g.feetY - g.charH + m.dy - g.W * 0.07 + float
+            let y: CGFloat = g.feetY - g.charH * m.sy + m.dy - g.W * 0.07 + float
             Headwear(id: hw, t: t)
                 .frame(width: g.W * 0.15, height: g.W * 0.15)
+                .rotationEffect(.degrees(m.tilt * 0.6))
                 .position(x: x, y: y)
         }
     }
@@ -151,38 +222,25 @@ struct CompanionScene: View {
         config.mood == .sad ? Color(hex: "7A86A8") : tint
     }
 
-    @ViewBuilder
-    private func character(g: SceneGeometry, t: Double) -> some View {
-        if config.stage == .egg {
-            EggView(tint: tint, progress: config.eggProgress, t: t)
-                .frame(width: g.charH * 0.78, height: g.charH)
-        } else {
-            Image(config.character.imageName)
-                .resizable()
-                .interpolation(.high)
-                .aspectRatio(contentMode: .fit)
-                .frame(width: g.charW, height: g.charH)
-                .shadow(color: tint.opacity(0.35), radius: 10)
-        }
-    }
-
     // MARK: - Движение
 
     struct Motion3 {
         var dy: CGFloat = 0
+        var dx: CGFloat = 0
         var sx: CGFloat = 1
         var sy: CGFloat = 1
         var tilt: Double = 0
-        var flip: Double = 0
+        var spin: Double = 0
         var lift: CGFloat = 0
+        var squash: CGFloat = 0
     }
 
     private func motion(t: Double, now: Date, g: SceneGeometry) -> Motion3 {
         var m = Motion3()
-        let sleeping = config.isNight && (config.mood == .calm || config.mood == .happy)
+        if isEgg { return m }
+        let sleeping = sim.asleep || (config.isNight && (config.mood == .calm || config.mood == .happy))
         let (amp, speed, squash): (Double, Double, Double) = {
-            if config.stage == .egg { return (0, 1.2, 0) }
-            if sleeping { return (1, 0.7, 0.02) }
+            if sleeping { return (0.8, 0.6, 0.02) }
             switch config.mood {
             case .happy: return (6, 2.6, 0.035)
             case .calm: return (3, 1.5, 0.02)
@@ -191,31 +249,211 @@ struct CompanionScene: View {
             }
         }()
         let wave = sin(t * speed)
-        m.dy = CGFloat(-abs(wave) * amp)
-        m.sy = CGFloat(1 + squash * wave)
-        m.sx = CGFloat(1 - squash * 0.6 * wave)
-        m.tilt = config.mood == .sad ? -5 : (config.mood == .happy ? 2.5 * sin(t * speed * 0.5) : 0)
-        if config.stage == .egg {
-            let shake = config.eggProgress > 0.75 ? 7.0 : 3.0
-            m.tilt = shake * sin(t * 3) * max(0, sin(t * 0.8))
+        let held = sim.hold == .holding || sim.airborne
+        if !held {
+            m.dy = CGFloat(-abs(wave) * amp)
+            m.sy = CGFloat(1 + squash * wave)
+            m.sx = CGFloat(1 - squash * 0.6 * wave)
+        }
+        m.tilt = config.mood == .sad || sleeping ? -4 : (config.mood == .happy ? 2.5 * sin(t * speed * 0.5) : 0)
+
+        // В руке — болтается, в полёте — кувыркается по скорости
+        if sim.hold == .holding {
+            m.tilt = Double(max(-25, min(25, sim.velocity.width / 40)))
+        } else if sim.airborne {
+            m.tilt = Double(max(-35, min(35, sim.velocity.width / 30)))
         }
 
-        // Реакция на тап: прыжок, каждый третий — сальто
-        if let start = tapStart {
-            let p = now.timeIntervalSince(start) / 0.75
-            if p >= 0 && p < 1 {
-                let up = sin(.pi * p)
-                m.dy -= CGFloat(up) * g.charH * 0.28
-                m.lift = CGFloat(up)
-                if p < 0.12 { m.sy *= CGFloat(1 - 0.12 * (p / 0.12)); m.sx *= CGFloat(1 + 0.08 * (p / 0.12)) }
-                if p > 0.88 { let q = (p - 0.88) / 0.12; m.sy *= CGFloat(0.9 + 0.1 * q); m.sx *= CGFloat(1.06 - 0.06 * q) }
-                if tapCount % 3 == 0 && config.stage != .egg {
-                    let e = p < 0.5 ? 2 * p * p : 1 - pow(-2 * p + 2, 2) / 2
-                    m.flip = 360 * e
-                }
+        // Прыжок от тапа, каждый третий — с оборотом
+        let p = now.timeIntervalSince(sim.jumpStart) / 0.72
+        if p >= 0 && p < 1 {
+            let up = sin(.pi * p)
+            m.dy -= CGFloat(up) * g.charH * 0.28
+            m.lift = CGFloat(up)
+            if p < 0.12 { m.squash += CGFloat(0.12 * (1 - p / 0.12)) }
+            if p > 0.86 { m.squash += CGFloat(0.12 * ((p - 0.86) / 0.14)) * CGFloat(1 - (p - 0.86) / 0.14) * 4 }
+            if sim.spin {
+                let e = p < 0.5 ? 2 * p * p : 1 - pow(-2 * p + 2, 2) / 2
+                m.spin = 360 * e
+            }
+        }
+
+        // Щекотка — хихикает и трясётся
+        if now < sim.tickleUntil {
+            let k = sim.tickleUntil.timeIntervalSince(now) / 1.1
+            m.dx = CGFloat(4 * sin(t * 55) * k)
+            m.tilt += 7 * sin(t * 38) * k
+            m.squash += CGFloat(0.05 * sin(t * 30) * k)
+        }
+
+        // Проснулся — потягивается
+        let w = now.timeIntervalSince(sim.wakeAt) / 0.8
+        if w >= 0 && w < 1 {
+            m.squash -= CGFloat(0.12 * sin(.pi * w))
+        }
+
+        // Кормление: подпрыгивает навстречу угощению и жуёт
+        if let f = sim.feedPhase(now) {
+            if f > 0.12 && f < 0.32 {
+                let q = (f - 0.12) / 0.2
+                m.dy -= CGFloat(sin(.pi * q)) * g.charH * 0.12
+            }
+            for c in [0.42, 0.6, 0.78] where f > c && f < c + 0.1 {
+                m.squash += CGFloat(0.14 * sin(.pi * (f - c) / 0.1))
             }
         }
         return m
+    }
+}
+
+// MARK: - Тело питомца: «желе», дыхание и глянец
+
+private struct PetBody: View {
+    let config: SceneConfig
+    let g: SceneGeometry
+    let sim: PetSim
+    let t: Double
+    let now: Date
+    let tilt: CGPoint
+    let tint: Color
+    let squashExtra: CGFloat
+    let asleep: Bool
+
+    var body: some View {
+        let pad: CGFloat = 0.16
+        let lw = g.charW * (1 + 2 * pad), lh = g.charH * (1 + 2 * pad)
+        let image = Image(config.character.imageName)
+            .resizable()
+            .interpolation(.high)
+            .aspectRatio(contentMode: .fit)
+            .frame(width: g.charW, height: g.charH)
+
+        if Motion.enabled {
+            let age = min(10, max(0, now.timeIntervalSince(sim.touchTime)))
+            let time = t.truncatingRemainder(dividingBy: 600)
+            let squash = max(-0.3, min(0.35, sim.squash + squashExtra))
+            let breathe: Double = asleep ? 1.6 : (config.mood == .happy ? 1.0 : 0.7)
+            let tx = pad * g.charW + sim.touch.x * g.charW
+            let ty = pad * g.charH + sim.touch.y * g.charH
+            image
+                .colorEffect(ShaderLibrary.petGloss(.float2(g.charW, g.charH),
+                                                    .float2(-tilt.x, -tilt.y),
+                                                    .float(asleep ? 0.12 : 0.28)))
+                .padding(.horizontal, g.charW * pad)
+                .padding(.vertical, g.charH * pad)
+                .distortionEffect(ShaderLibrary.petJelly(.float2(lw, lh), .float2(tx, ty),
+                                                         .float(age), .float(Double(sim.touchAmp)),
+                                                         .float(Double(squash)), .float(time),
+                                                         .float(breathe), .float(Double(pad))),
+                                  maxSampleOffset: CGSize(width: lw * 0.25, height: lh * 0.3))
+                .shadow(color: tint.opacity(0.35), radius: 10)
+                .frame(width: g.charW, height: g.charH)
+        } else {
+            image.shadow(color: tint.opacity(0.35), radius: 10)
+        }
+    }
+}
+
+// MARK: - Сердечки, угощение и крошки
+
+private struct PlayEffects: View {
+    let sim: PetSim
+    let now: Date
+    let g: SceneGeometry
+    let tint: Color
+
+    var body: some View {
+        ZStack {
+            ForEach(sim.hearts) { h in
+                let age = now.timeIntervalSince(h.born) / 1.4
+                Image(systemName: "heart.fill")
+                    .font(.system(size: g.W * 0.06))
+                    .foregroundStyle(LinearGradient(colors: [Color(hex: "FF9AC1"), Color(hex: "FF4F8B")], startPoint: .top, endPoint: .bottom))
+                    .scaleEffect(0.6 + 0.6 * min(1, age * 3))
+                    .opacity(1 - age)
+                    .position(x: h.x + CGFloat(sin(age * 9 + Double(h.id))) * 8, y: h.y - CGFloat(age) * g.H * 0.35)
+            }
+            if let f = sim.feedPhase(now) {
+                treat(f)
+            }
+            ForEach(sim.crumbs) { c in
+                let a = now.timeIntervalSince(c.born)
+                Circle()
+                    .fill(Color(hex: "E8B56A"))
+                    .frame(width: 4, height: 4)
+                    .opacity(1 - a / 0.9)
+                    .position(x: c.x + c.vx * CGFloat(a), y: mouthY + c.vy * CGFloat(a) + 700 * CGFloat(a * a))
+            }
+        }
+        .allowsHitTesting(false)
+    }
+
+    private var mouthY: CGFloat { g.feetY - g.charH * 0.62 }
+
+    @ViewBuilder
+    private func treat(_ f: Double) -> some View {
+        // Падает сверху до «рта», дальше откусывается в три приёма
+        let fall = min(1, f / 0.32)
+        let y = -g.H * 0.1 + (mouthY - (-g.H * 0.1)) * CGFloat(fall * fall)
+        let bites = f < 0.42 ? 0 : (f < 0.6 ? 1 : (f < 0.78 ? 2 : 3))
+        if bites < 3 {
+            Text(sim.treatEmoji)
+                .font(.system(size: g.W * 0.11))
+                .scaleEffect(1 - CGFloat(bites) * 0.28)
+                .rotationEffect(.degrees(f * 200))
+                .position(x: g.W / 2 + sim.offset.width, y: y)
+                .onChange(of: bites) { _, b in
+                    if b > 0 {
+                        Haptics.chomp()
+                        sim.spawnCrumbs(at: g.W / 2 + sim.offset.width, now: .now)
+                        sim.poke(at: CGPoint(x: 0.5, y: 0.35), strength: 0.8)
+                    }
+                }
+        } else {
+            Color.clear.onAppear {
+                Haptics.success()
+                sim.addHeart(x: g.W / 2 + sim.offset.width - 20, y: mouthY)
+                sim.addHeart(x: g.W / 2 + sim.offset.width + 20, y: mouthY - 10)
+            }
+        }
+    }
+}
+
+// MARK: - Жесты
+
+private struct PetGestures: ViewModifier {
+    let mode: SceneMode
+    let sim: PetSim
+    let charRect: () -> CGRect
+
+    func body(content: Content) -> some View {
+        switch mode {
+        case .display:
+            content
+        case .card:
+            content.gesture(
+                SpatialTapGesture().onEnded { v in
+                    let r = charRect()
+                    sim.tap(at: CGPoint(x: (v.location.x - r.minX) / max(1, r.width),
+                                        y: (v.location.y - r.minY) / max(1, r.height)), allowSpin: true)
+                }
+            )
+        case .full:
+            content.gesture(
+                DragGesture(minimumDistance: 0, coordinateSpace: .local)
+                    .onChanged { v in
+                        if !sim.fingerActive {
+                            sim.fingerActive = true
+                            sim.fingerDown(v.startLocation, charRect: charRect())
+                        }
+                        sim.fingerMoved(v.location, charRect: charRect(), scale: .zero)
+                    }
+                    .onEnded { v in
+                        sim.fingerUp(v.location, charRect: charRect(), allowSpin: true)
+                        sim.fingerActive = false
+                    }
+            )
+        }
     }
 }
 

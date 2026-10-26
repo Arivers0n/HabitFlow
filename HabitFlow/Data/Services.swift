@@ -35,6 +35,36 @@ enum Haptics {
         UINotificationFeedbackGenerator().notificationOccurred(.warning)
     }
 
+    /// Щекотка: серия мелких лёгких толчков.
+    static func tickle() {
+        guard on else { return }
+        let g = UIImpactFeedbackGenerator(style: .light)
+        for i in 0..<5 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + Double(i) * 0.07) { g.impactOccurred(intensity: 0.6) }
+        }
+    }
+
+    /// Поглаживание: мягкое «мурчание».
+    static func purr() {
+        guard on else { return }
+        let g = UIImpactFeedbackGenerator(style: .soft)
+        g.impactOccurred(intensity: 0.45)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.09) { g.impactOccurred(intensity: 0.3) }
+    }
+
+    /// Приземление после броска — сила зависит от скорости.
+    static func land(strength: Double) {
+        guard on else { return }
+        UIImpactFeedbackGenerator(style: strength > 0.6 ? .heavy : .medium)
+            .impactOccurred(intensity: CGFloat(max(0.3, min(1, strength))))
+    }
+
+    /// «Ням» при кормлении.
+    static func chomp() {
+        guard on else { return }
+        UIImpactFeedbackGenerator(style: .rigid).impactOccurred(intensity: 0.7)
+    }
+
     /// Двойной «тук-тук» для награды.
     static func celebrate() {
         guard on else { return }
@@ -138,6 +168,13 @@ final class TriggerLibrary {
         } else {
             items = Self.defaults
         }
+        PrefSync.register("triggers", export: { [weak self] in
+            guard let self else { return nil }
+            return try? JSONEncoder().encode(self.items)
+        }, apply: { [weak self] data in
+            guard let self, let list = try? JSONDecoder().decode([TriggerItem].self, from: data), !list.isEmpty else { return }
+            self.items = list
+        })
     }
 
     func symbol(for name: String) -> String {
@@ -150,5 +187,6 @@ final class TriggerLibrary {
         if let data = try? JSONEncoder().encode(items) {
             UserDefaults.standard.set(data, forKey: Self.key)
         }
+        PrefSync.markChanged("triggers")
     }
 }

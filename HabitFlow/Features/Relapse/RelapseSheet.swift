@@ -13,6 +13,7 @@ struct RelapseSheet: View {
     @State private var trigger = ""
     @State private var customTrigger = ""
     @State private var note = ""
+    @State private var analyze = AI.available
     @FocusState private var noteFocused: Bool
 
     private var library: TriggerLibrary { .shared }
@@ -121,6 +122,17 @@ struct RelapseSheet: View {
                     .padding(16)
                     .card(radius: 22)
 
+                    if AI.available {
+                        Toggle(isOn: $analyze) {
+                            Label("Разобрать с напарником", systemImage: "sparkles")
+                                .font(.subheadline.weight(.medium))
+                        }
+                        .tint(habit.color)
+                        .padding(.horizontal, 16)
+                        .frame(minHeight: 52)
+                        .card(radius: 18)
+                    }
+
                     Button(action: save) {
                         Text(Copy.relapseSave)
                     }
@@ -163,5 +175,12 @@ struct RelapseSheet: View {
         let record = max(before.best, store.engine.quitStreak(habit.snapshot).best)
         onSaved(Copy.relapseSaved(previous: DurationText.human(record)))
         dismiss()
+        if analyze && AI.available {
+            var text = "У меня был срыв: «\(habit.name)», \(NumberText.value(amount)) \(habit.unitName.isEmpty ? "раз" : habit.unitName)."
+            if !reason.isEmpty { text += " Причина: \(reason)." }
+            if !note.trimmingCharacters(in: .whitespaces).isEmpty { text += " \(note.trimmingCharacters(in: .whitespaces))" }
+            text += " Помоги разобраться без осуждения и подскажи, что делать в следующий раз в похожей ситуации."
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { AppRouter.shared.chat(about: text) }
+        }
     }
 }

@@ -45,8 +45,51 @@ struct CompanionState: Codable, Equatable {
     var lastOpen: Date?
     var gapAtOpen: TimeInterval?
     var showOnToday = true
+    /// Угощения: даются за выполненные цели и «Устоял», тратятся на кормление.
+    var treats = 0
+    var lastFed: Date?
+    var timesFed = 0
+    var timesPetted = 0
 
     init() {}
+
+    /// Часть состояния, общая для всех устройств (без «когда открывали на этом телефоне»).
+    struct Synced: Codable, Equatable {
+        var characterID: String?
+        var nickname: String
+        var userName: String
+        var onboardingDone: Bool
+        var lastSeenLevel: Int
+        var headwear: String?
+        var aura: String?
+        var hiddenDecor: [String]
+        var showOnToday: Bool
+        var treats: Int
+        var timesFed: Int
+        var timesPetted: Int
+    }
+
+    var synced: Synced {
+        get {
+            Synced(characterID: characterID, nickname: nickname, userName: userName, onboardingDone: onboardingDone,
+                   lastSeenLevel: lastSeenLevel, headwear: headwear, aura: aura, hiddenDecor: hiddenDecor,
+                   showOnToday: showOnToday, treats: treats, timesFed: timesFed, timesPetted: timesPetted)
+        }
+        set {
+            characterID = newValue.characterID
+            nickname = newValue.nickname
+            userName = newValue.userName
+            onboardingDone = newValue.onboardingDone || onboardingDone
+            lastSeenLevel = max(lastSeenLevel, newValue.lastSeenLevel)
+            headwear = newValue.headwear
+            aura = newValue.aura
+            hiddenDecor = newValue.hiddenDecor
+            showOnToday = newValue.showOnToday
+            treats = newValue.treats
+            timesFed = max(timesFed, newValue.timesFed)
+            timesPetted = max(timesPetted, newValue.timesPetted)
+        }
+    }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -61,6 +104,10 @@ struct CompanionState: Codable, Equatable {
         lastOpen = try? c.decodeIfPresent(Date.self, forKey: .lastOpen)
         gapAtOpen = try? c.decodeIfPresent(TimeInterval.self, forKey: .gapAtOpen)
         showOnToday = (try? c.decodeIfPresent(Bool.self, forKey: .showOnToday)) ?? true
+        treats = (try? c.decodeIfPresent(Int.self, forKey: .treats)) ?? 0
+        lastFed = try? c.decodeIfPresent(Date.self, forKey: .lastFed)
+        timesFed = (try? c.decodeIfPresent(Int.self, forKey: .timesFed)) ?? 0
+        timesPetted = (try? c.decodeIfPresent(Int.self, forKey: .timesPetted)) ?? 0
     }
 }
 
@@ -85,6 +132,49 @@ final class CompanionManager {
     private init() {
         state = UserDefaults.standard.data(forKey: Self.key)
             .flatMap { try? JSONDecoder().decode(CompanionState.self, from: $0) } ?? CompanionState()
+        lastSynced = state.synced
+        PrefSync.register("companion", export: { [weak self] in
+            guard let self else { return nil }
+            return try? JSONEncoder().encode(self.state.synced)
+        }, apply: { [weak self] data in
+            guard let self, let s = try? JSONDecoder().decode(CompanionState.Synced.self, from: data) else { return }
+            self.state.synced = s
+        })
+    }
+
+    private var lastSynced: CompanionState.Synced?
+
+    // MARK: - Угощения и игры
+
+    static let maxTreats = 9
+
+    private var testing: Bool { TestMode.shared.data != nil }
+
+    func earnTreat() {
+        guard hasCompanion, !testing else { return }
+        state.treats = min(Self.maxTreats, state.treats + 1)
+    }
+
+    /// Покормить. Возвращает false, если угощений нет.
+    @discardableResult
+    func feed() -> Bool {
+        if testing { return true }
+        guard state.treats > 0 else { return false }
+        state.treats -= 1
+        state.lastFed = .now
+        state.timesFed += 1
+        return true
+    }
+
+    func petted() {
+        guard !testing else { return }
+        state.timesPetted += 1
+    }
+
+    /// Недавно покормили — напарник довольный (если только он не утешает после срыва).
+    var recentlyFed: Bool {
+        guard let f = state.lastFed else { return false }
+        return Date().timeIntervalSince(f) < 30 * 60
     }
 
     var character: CompanionCharacter? { CompanionCatalog.character(state.characterID) }
@@ -107,12 +197,17 @@ final class CompanionManager {
             xp: xp,
             progress: progress,
             stage: XPRules.stage(for: progress.level),
-            mood: engine.mood(snaps, gapSinceLastOpen: state.gapAtOpen, now: now),
+            mood: adjustedMood(engine.mood(snaps, gapSinceLastOpen: state.gapAtOpen, now: now)),
             isNight: hour >= 23 || hour < 6,
             today: engine.summary(snaps, on: now),
             quest: engine.questHabit(snaps, now: now),
             bestQuit: engine.bestQuit(snaps, now: now)
         )
+    }
+
+    private func adjustedMood(_ m: CompanionMood) -> CompanionMood {
+        if m != .caring && recentlyFed { return .happy }
+        return m
     }
 
     func phrase(for s: CompanionStatus) -> String {
@@ -216,6 +311,11 @@ final class CompanionManager {
     private func persist() {
         if let data = try? JSONEncoder().encode(state) {
             UserDefaults.standard.set(data, forKey: Self.key)
+        }
+        let now = state.synced
+        if now != lastSynced {
+            lastSynced = now
+            PrefSync.markChanged("companion")
         }
     }
 }

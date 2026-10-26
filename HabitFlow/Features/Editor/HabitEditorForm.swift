@@ -116,6 +116,16 @@ struct HabitEditorForm: View {
                 }
             }
 
+            Section {
+                Picker("Видят друзья", selection: $draft.shareMode) {
+                    Text(draft.kind == .build ? "Авто (да)" : "Авто (нет)").tag(0)
+                    Text("Да").tag(1)
+                    Text("Нет").tag(2)
+                }
+            } footer: {
+                Text("В кругах друзей видно название и серию. Вредные привычки по умолчанию скрыты.")
+            }
+
             Section("Заметка") {
                 TextField("Зачем мне это", text: $draft.note, axis: .vertical)
                     .lineLimit(1...4)

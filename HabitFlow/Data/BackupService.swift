@@ -38,24 +38,28 @@ enum BackupService {
         var checkIns: [CheckInDTO]
         var relapses: [RelapseDTO]
         var resists: [Date]?
+        var shareMode: Int?
     }
 
     struct CheckInDTO: Codable { var date: Date; var value: Double }
     struct RelapseDTO: Codable { var date: Date; var amount: Double; var trigger: String; var note: String }
 
+    static func dto(_ h: Habit) -> HabitDTO {
+        HabitDTO(id: h.id, name: h.name, kind: h.kindRaw, symbol: h.symbol, colorHex: h.colorHex,
+                 note: h.note, createdAt: h.createdAt, startDate: h.startDate, sortOrder: h.sortOrder,
+                 isArchived: h.isArchived, scheduleType: h.scheduleType, timesPerWeek: h.timesPerWeek,
+                 weekdaysMask: h.weekdaysMask, goalTarget: h.goalTarget, goalUnit: h.goalUnit,
+                 goalStep: h.goalStep, unitName: h.unitName, baselinePerDay: h.baselinePerDay,
+                 costPerUnit: h.costPerUnit, reminderOn: h.reminderOn, reminderMinutes: h.reminderMinutes,
+                 celebratedDays: h.celebratedDays,
+                 checkIns: h.checkIns.map { CheckInDTO(date: $0.date, value: $0.value) },
+                 relapses: h.relapses.map { RelapseDTO(date: $0.date, amount: $0.amount, trigger: $0.trigger, note: $0.note) },
+                 resists: h.resists.map(\.date),
+                 shareMode: h.shareMode)
+    }
+
     static func export(_ habits: [Habit]) throws -> URL {
-        let file = File(exportedAt: .now, habits: habits.map { h in
-            HabitDTO(id: h.id, name: h.name, kind: h.kindRaw, symbol: h.symbol, colorHex: h.colorHex,
-                     note: h.note, createdAt: h.createdAt, startDate: h.startDate, sortOrder: h.sortOrder,
-                     isArchived: h.isArchived, scheduleType: h.scheduleType, timesPerWeek: h.timesPerWeek,
-                     weekdaysMask: h.weekdaysMask, goalTarget: h.goalTarget, goalUnit: h.goalUnit,
-                     goalStep: h.goalStep, unitName: h.unitName, baselinePerDay: h.baselinePerDay,
-                     costPerUnit: h.costPerUnit, reminderOn: h.reminderOn, reminderMinutes: h.reminderMinutes,
-                     celebratedDays: h.celebratedDays,
-                     checkIns: h.checkIns.map { CheckInDTO(date: $0.date, value: $0.value) },
-                     relapses: h.relapses.map { RelapseDTO(date: $0.date, amount: $0.amount, trigger: $0.trigger, note: $0.note) },
-                     resists: h.resists.map(\.date))
-        })
+        let file = File(exportedAt: .now, habits: habits.map { dto($0) })
         let enc = JSONEncoder()
         enc.dateEncodingStrategy = .iso8601
         enc.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -67,6 +71,55 @@ enum BackupService {
             .appendingPathComponent("HabitFlow-\(f.string(from: .now)).json")
         try data.write(to: url, options: .atomic)
         return url
+    }
+
+    /// Создаёт привычку со всей историей. `ids` — исходные id записей (для отмены удаления),
+    /// без них записи получают новые id.
+    @discardableResult
+    static func restore(_ d: HabitDTO, ids: ([UUID], [UUID], [UUID])? = nil, into context: ModelContext) -> Habit {
+        let h = Habit(name: d.name, kind: HabitKind(rawValue: d.kind) ?? .build)
+        h.id = d.id
+        h.symbol = d.symbol
+        h.colorHex = d.colorHex
+        h.note = d.note
+        h.createdAt = d.createdAt
+        h.startDate = d.startDate
+        h.sortOrder = d.sortOrder
+        h.isArchived = d.isArchived
+        h.scheduleType = d.scheduleType
+        h.timesPerWeek = d.timesPerWeek
+        h.weekdaysMask = d.weekdaysMask
+        h.goalTarget = d.goalTarget
+        h.goalUnit = d.goalUnit
+        h.goalStep = d.goalStep
+        h.unitName = d.unitName
+        h.baselinePerDay = d.baselinePerDay
+        h.costPerUnit = d.costPerUnit
+        h.reminderOn = d.reminderOn
+        h.reminderMinutes = d.reminderMinutes
+        h.celebratedDays = d.celebratedDays
+        h.shareMode = d.shareMode ?? 0
+        h.touch()
+        context.insert(h)
+        for (i, c) in d.checkIns.enumerated() {
+            let ci = CheckIn(date: c.date, value: c.value)
+            if let ids, i < ids.0.count { ci.id = ids.0[i] }
+            context.insert(ci)
+            ci.habit = h
+        }
+        for (i, r) in d.relapses.enumerated() {
+            let rel = Relapse(date: r.date, amount: r.amount, trigger: r.trigger, note: r.note)
+            if let ids, i < ids.1.count { rel.id = ids.1[i] }
+            context.insert(rel)
+            rel.habit = h
+        }
+        for (i, date) in (d.resists ?? []).enumerated() {
+            let rs = Resist(date: date)
+            if let ids, i < ids.2.count { rs.id = ids.2[i] }
+            context.insert(rs)
+            rs.habit = h
+        }
+        return h
     }
 
     /// Возвращает число добавленных привычек.
@@ -81,47 +134,12 @@ enum BackupService {
         let existing = Set(((try? context.fetch(FetchDescriptor<Habit>())) ?? []).map(\.id))
         var added = 0
         for d in file.habits where !existing.contains(d.id) {
-            let h = Habit(name: d.name, kind: HabitKind(rawValue: d.kind) ?? .build)
-            h.id = d.id
-            h.symbol = d.symbol
-            h.colorHex = d.colorHex
-            h.note = d.note
-            h.createdAt = d.createdAt
-            h.startDate = d.startDate
-            h.sortOrder = d.sortOrder
-            h.isArchived = d.isArchived
-            h.scheduleType = d.scheduleType
-            h.timesPerWeek = d.timesPerWeek
-            h.weekdaysMask = d.weekdaysMask
-            h.goalTarget = d.goalTarget
-            h.goalUnit = d.goalUnit
-            h.goalStep = d.goalStep
-            h.unitName = d.unitName
-            h.baselinePerDay = d.baselinePerDay
-            h.costPerUnit = d.costPerUnit
-            h.reminderOn = d.reminderOn
-            h.reminderMinutes = d.reminderMinutes
-            h.celebratedDays = d.celebratedDays
-            context.insert(h)
-            for c in d.checkIns {
-                let ci = CheckIn(date: c.date, value: c.value)
-                context.insert(ci)
-                ci.habit = h
-            }
-            for r in d.relapses {
-                let rel = Relapse(date: r.date, amount: r.amount, trigger: r.trigger, note: r.note)
-                context.insert(rel)
-                rel.habit = h
-            }
-            for date in d.resists ?? [] {
-                let rs = Resist(date: date)
-                context.insert(rs)
-                rs.habit = h
-            }
+            let h = restore(d, into: context)
             NotificationService.sync(h)
             added += 1
         }
         try context.save()
+        SyncEngine.shared.schedulePush()
         return added
     }
 }

@@ -7,13 +7,16 @@ struct TodayView: View {
     private var habits: [Habit]
 
     @State private var selectedDay = Calendar.habitFlow.startOfDay(for: .now)
-    @State private var showNew = false
     @State private var editing: Habit?
     @State private var relapseFor: Habit?
     @State private var opened: Habit?
     @State private var confirmDelete: Habit?
     @State private var toast: String?
     @State private var editMode: EditMode = .inactive
+    @State private var undoVisible = false
+    @Environment(\.horizontalSizeClass) private var hSize
+
+    private var router: AppRouter { .shared }
 
     private var build: [Habit] { habits.filter { $0.kind == .build } }
     private var quit: [Habit] { habits.filter { $0.kind == .quit } }
@@ -21,42 +24,28 @@ struct TodayView: View {
     private var isToday: Bool { cal.isDateInToday(selectedDay) }
 
     var body: some View {
-        let ap = Appearance.shared
         NavigationStack {
-            List {
-                Group {
-                    if CompanionManager.shared.hasCompanion && CompanionManager.shared.state.showOnToday {
-                        CompanionCard()
+            Group {
+                if hSize == .regular {
+                    // iPad: слева напарник и сводка, справа привычки
+                    HStack(alignment: .top, spacing: 0) {
+                        ScrollView {
+                            VStack(spacing: 12) { headerBlocks }
+                                .padding(16)
+                        }
+                        .frame(width: 400)
+                        habitList(withHeader: false)
                     }
-                    if ap.s.showSummary {
-                        SummaryHeader(build: build, quit: quit, day: selectedDay)
-                    }
-                    if ap.s.showWeekStrip && !build.isEmpty {
-                        WeekStrip(habits: build, selected: $selectedDay)
-                    }
-                }
-                .plainRow(top: 4, bottom: 10)
-
-                if habits.isEmpty {
-                    emptyState.plainRow()
-                } else if ap.s.quitFirst {
-                    quitSection
-                    buildSection
                 } else {
-                    buildSection
-                    quitSection
+                    habitList(withHeader: true)
                 }
-
-                Color.clear.frame(height: 24).plainRow()
             }
-            .listStyle(.plain)
-            .scrollContentBackground(.hidden)
             .background(AppBackground())
-            .environment(\.editMode, $editMode)
             .navigationTitle(title)
             .toolbar { toolbar }
             .navigationDestination(item: $opened) { HabitDetailView(habit: $0) }
-            .sheet(isPresented: $showNew) { NewHabitGallery() }
+            .sheet(isPresented: Binding(get: { router.showNewHabit }, set: { router.showNewHabit = $0 })) { NewHabitGallery() }
+            .sheet(isPresented: Binding(get: { router.showAIComposer }, set: { router.showAIComposer = $0 })) { AIHabitComposer() }
             .sheet(item: $editing) { h in
                 NavigationStack { HabitEditorForm(draft: HabitDraft(habit: h), habit: h) { editing = nil } }
             }
@@ -65,14 +54,82 @@ struct TodayView: View {
             }
             .confirmationDialog("Удалить «\(confirmDelete?.name ?? "")»?", isPresented: deleteBinding, titleVisibility: .visible) {
                 Button("Удалить вместе с историей", role: .destructive) {
-                    if let h = confirmDelete { withAnimation(Motion.smooth) { store.delete(h) } }
+                    if let h = confirmDelete { delete(h) }
                 }
                 Button("В архив") { if let h = confirmDelete { store.setArchived(h, true) } }
             } message: {
-                Text("История и рекорды пропадут. Архив сохранит всё и уберёт привычку с экрана.")
+                Text("Удаление можно отменить в течение нескольких секунд. Архив сохранит всё и уберёт привычку с экрана.")
             }
-            .overlay(alignment: .bottom) { ToastView(text: toast) }
+            .overlay(alignment: .bottom) {
+                VStack(spacing: 8) {
+                    if undoVisible, let d = store.lastDeleted {
+                        UndoToast(name: d.dto.name) {
+                            withAnimation(Motion.bouncy) {
+                                store.undoDelete()
+                                undoVisible = false
+                            }
+                            Haptics.success()
+                        }
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
+                    ToastView(text: toast)
+                }
+                .animation(Motion.bouncy, value: undoVisible)
+            }
             .onAppear { store.checkAllMilestones(habits) }
+        }
+    }
+
+    @ViewBuilder
+    private var headerBlocks: some View {
+        let ap = Appearance.shared
+        if CompanionManager.shared.hasCompanion && CompanionManager.shared.state.showOnToday {
+            CompanionCard()
+        }
+        if ap.s.showSummary {
+            SummaryHeader(build: build, quit: quit, day: selectedDay)
+        }
+        if ap.s.showWeekStrip && !build.isEmpty {
+            WeekStrip(habits: build, selected: $selectedDay)
+        }
+    }
+
+    private func habitList(withHeader: Bool) -> some View {
+        let ap = Appearance.shared
+        return List {
+            if withHeader {
+                Group { headerBlocks }
+                    .plainRow(top: 4, bottom: 10)
+            }
+
+            if habits.isEmpty {
+                emptyState.plainRow()
+            } else if ap.s.quitFirst {
+                quitSection
+                buildSection
+            } else {
+                buildSection
+                quitSection
+            }
+
+            Color.clear.frame(height: 24).plainRow()
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .environment(\.editMode, $editMode)
+        .refreshable {
+            if SyncEngine.shared.loggedIn { await SyncEngine.shared.sync() }
+            Haptics.soft()
+        }
+    }
+
+    private func delete(_ h: Habit) {
+        withAnimation(Motion.smooth) { store.deleteWithUndo(h) }
+        undoVisible = true
+        Haptics.warning()
+        Task {
+            try? await Task.sleep(for: .seconds(6))
+            withAnimation(Motion.smooth) { undoVisible = false }
         }
     }
 
@@ -123,10 +180,14 @@ struct TodayView: View {
             EmptyStateCard(symbol: "sparkles",
                            title: "Начни с одной привычки",
                            subtitle: "Выпивать 2 литра воды, читать по 20 страниц или бросить курить — выбери шаблон или создай свою.")
-            Button { showNew = true } label: {
+            Button { router.showNewHabit = true } label: {
                 Label("Добавить привычку", systemImage: "plus")
             }
             .buttonStyle(PrimaryButtonStyle(color: Appearance.shared.accent))
+            Button { router.showAIComposer = true } label: {
+                Label("Описать словами — ИИ разложит", systemImage: "sparkles")
+                    .font(.subheadline.weight(.semibold))
+            }
         }
         .padding(.top, 12)
     }
@@ -141,8 +202,14 @@ struct TodayView: View {
                 }
             }
         }
-        ToolbarItem(placement: .topBarTrailing) {
-            Button { showNew = true; Haptics.tap() } label: {
+        ToolbarItemGroup(placement: .topBarTrailing) {
+            Button { router.showAIComposer = true; Haptics.tap() } label: {
+                Image(systemName: "sparkles")
+                    .font(.headline)
+                    .frame(width: 36, height: 36)
+            }
+            .accessibilityLabel("Привычки с ИИ")
+            Button { router.showNewHabit = true; Haptics.tap() } label: {
                 Image(systemName: "plus")
                     .font(.headline)
                     .frame(width: 36, height: 36)
@@ -205,5 +272,27 @@ struct ToastView: View {
                 .padding(.bottom, 16)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
         }
+    }
+}
+
+/// «Привычка удалена · Отменить».
+struct UndoToast: View {
+    let name: String
+    var onUndo: () -> Void
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "trash.fill").foregroundStyle(.secondary)
+            Text("«\(name)» удалена").font(.subheadline.weight(.medium)).lineLimit(1)
+            Spacer(minLength: 8)
+            Button("Отменить", action: onUndo)
+                .font(.subheadline.weight(.bold))
+                .foregroundStyle(Appearance.shared.accent)
+                .frame(minHeight: 36)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .card(radius: 20)
+        .padding(.horizontal, 20)
     }
 }

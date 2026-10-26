@@ -11,19 +11,48 @@ struct SettingsView: View {
     @State private var importing = false
     @State private var confirmWipe = false
     @State private var message: String?
+    @State private var versionTaps = 0
 
     var body: some View {
         @Bindable var ap = Appearance.shared
         NavigationStack {
             Form {
+                Section {
+                    NavigationLink { AccountSettingsView() } label: {
+                        HStack {
+                            settingsRow(SyncEngine.shared.loggedIn ? (SyncEngine.shared.userName.isEmpty ? "Аккаунт" : SyncEngine.shared.userName) : "Войти",
+                                        "person.crop.circle.fill", Appearance.shared.accent)
+                            Spacer()
+                            if SyncEngine.shared.loggedIn {
+                                Image(systemName: SyncEngine.shared.moduleAvailable ? "checkmark.icloud.fill" : "icloud")
+                                    .foregroundStyle(SyncEngine.shared.moduleAvailable ? Palette.success : Color.secondary)
+                            }
+                        }
+                    }
+                    NavigationLink { AISettingsView() } label: {
+                        HStack {
+                            settingsRow("Умные функции", "sparkles", Color(hex: "9B6BFF"))
+                            Spacer()
+                            Text(AI.statusText).font(.footnote).foregroundStyle(.secondary)
+                        }
+                    }
+                    NavigationLink { FriendsView() } label: {
+                        settingsRow("Друзья и семья", "person.2.fill", Color(hex: "FF5FA2"))
+                    }
+                } header: {
+                    Text("Аккаунт")
+                } footer: {
+                    Text("Аккаунт общий с Копилкой: синхронизация iPhone и iPad, ИИ без своего ключа и круги друзей.")
+                }
+
                 Section("Оформление") {
-                    NavigationLink { AppearanceSettingsView() } label: {
+                    NavigationLink { LookSettingsView(tab: .theme) } label: {
                         settingsRow("Темы и цвета", "paintpalette.fill", Appearance.shared.accent)
                     }
-                    NavigationLink { IconPickerView() } label: {
+                    NavigationLink { LookSettingsView(tab: .icons) } label: {
                         settingsRow("Иконка приложения", "app.badge.fill", Color(hex: "B65CFF"))
                     }
-                    NavigationLink { HomeSettingsView() } label: {
+                    NavigationLink { LookSettingsView(tab: .screen) } label: {
                         settingsRow("Главный экран", "rectangle.stack.fill", Color(hex: "2ECFC4"))
                     }
                 }
@@ -87,6 +116,20 @@ struct SettingsView: View {
                         Text("Версия")
                         Spacer()
                         Text(version).foregroundStyle(.secondary)
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        versionTaps += 1
+                        if versionTaps >= 7 {
+                            versionTaps = 0
+                            TestMode.shared.enter()
+                        } else if versionTaps >= 4 {
+                            Haptics.selection()
+                        }
+                    }
+                } footer: {
+                    if versionTaps >= 4 {
+                        Text("Ещё \(7 - versionTaps) — и откроется проверка интерфейса на тестовых данных.")
                     }
                 }
             }

@@ -24,6 +24,7 @@ struct ProgressScreen: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
+                    FriendsEntry()
                     if habits.isEmpty {
                         EmptyStateCard(symbol: "chart.bar.xaxis", title: "Пока нечего считать",
                                        subtitle: "Добавь привычку на вкладке «Сегодня» — здесь появятся серии, графики и награды.")
@@ -34,6 +35,8 @@ struct ProgressScreen: View {
                             StatTile(value: "\(badges)", caption: plural(badges, "награда", "награды", "наград") + " получено", symbol: "medal.fill", color: Color(hex: "B65CFF"))
                             StatTile(value: "\(habits.count)", caption: plural(habits.count, "активная привычка", "активные привычки", "активных привычек"), symbol: "square.stack.3d.up.fill", color: Palette.success)
                         }
+
+                        WeeklyReviewCard(habits: habits)
 
                         if !build.isEmpty {
                             Heatmap(habits: build, color: accent)
@@ -53,10 +56,14 @@ struct ProgressScreen: View {
                 }
                 .padding(16)
                 .padding(.bottom, 24)
+                .frame(maxWidth: 760)
+                .frame(maxWidth: .infinity)
             }
             .background(AppBackground())
             .navigationTitle("Прогресс")
             .navigationDestination(item: $opened) { HabitDetailView(habit: $0) }
+            .navigationDestination(isPresented: Binding(get: { AppRouter.shared.showFriends },
+                                                        set: { AppRouter.shared.showFriends = $0 })) { FriendsView() }
         }
     }
 
@@ -216,5 +223,57 @@ struct IconRewardsCard: View {
         }
         .padding(16)
         .card()
+    }
+}
+
+
+/// Вход в «Друзья»: круг аватарок и число хлопков.
+private struct FriendsEntry: View {
+    var body: some View {
+        let store = FriendsStore.shared
+        let people = store.circles.flatMap(\.members).filter { !$0.me }
+        let unique = Array(Dictionary(people.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a }).values).prefix(4)
+        Button { AppRouter.shared.showFriends = true; Haptics.tap() } label: {
+            HStack(spacing: 14) {
+                ZStack {
+                    if unique.isEmpty {
+                        Image(systemName: "person.2.fill")
+                            .font(.title3.weight(.semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 46, height: 46)
+                            .background(Circle().fill(LinearGradient(colors: [Color(hex: "FF8FB8"), Color(hex: "B65CFF")],
+                                                                     startPoint: .topLeading, endPoint: .bottomTrailing)))
+                    } else {
+                        HStack(spacing: -14) {
+                            ForEach(Array(unique)) { m in
+                                let c = CompanionCatalog.character(m.companion)
+                                ZStack {
+                                    Circle().fill(Color(hex: c?.tintHex ?? "4C8DFF").opacity(0.3))
+                                    if let c, m.stage > 0 {
+                                        Image(c.imageName).resizable().aspectRatio(contentMode: .fit).padding(4)
+                                    } else {
+                                        Text(String(m.name.prefix(1))).font(.subheadline.weight(.bold))
+                                    }
+                                }
+                                .frame(width: 40, height: 40)
+                                .overlay(Circle().strokeBorder(Color.black.opacity(0.25), lineWidth: 1))
+                            }
+                        }
+                    }
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Друзья и семья").font(.headline).foregroundStyle(.primary)
+                    Text(unique.isEmpty ? "Серии вместе и поддержка друг друга" : "\(people.count) \(plural(people.count, "человек", "человека", "человек")) в кругах")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(.tertiary)
+            }
+            .padding(14)
+            .card(radius: 22)
+        }
+        .buttonStyle(PressableStyle(scale: 0.98))
+        .task { if store.circles.isEmpty { await store.load() } }
     }
 }

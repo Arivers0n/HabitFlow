@@ -9,6 +9,8 @@ struct CompanionScreen: View {
     @State private var naming = false
     @State private var text = ""
     @State private var tapLine: String?
+    @State private var feedToken = 0
+    @State private var lineTask: Task<Void, Never>?
 
     var body: some View {
         let mgr = CompanionManager.shared
@@ -68,12 +70,15 @@ struct CompanionScreen: View {
     private func hero(_ s: CompanionStatus, mgr: CompanionManager) -> some View {
         let tint = Color(hex: s.character.tintHex)
         return VStack(spacing: 12) {
-            CompanionScene(config: .from(s), size: 300) {
-                withAnimation(Motion.smooth) { tapLine = CompanionPhrases.tapLine(seed: Int.random(in: 0..<100)) }
-                Task {
-                    try? await Task.sleep(for: .seconds(2))
-                    withAnimation(Motion.smooth) { tapLine = nil }
-                }
+            CompanionScene(config: .from(s), size: 300, mode: .full, feedToken: feedToken,
+                           onEvent: { e in react(e, stage: s.stage) })
+            if s.stage != .egg {
+                playBar(mgr: mgr, tint: tint)
+            } else {
+                Text("Покрути яйцо пальцем или постучи по нему. Оно вылупится на уровне 2.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
             }
             VStack(spacing: 4) {
                 Button { text = mgr.displayName; renaming = true } label: {
@@ -96,9 +101,80 @@ struct CompanionScreen: View {
                     Haptics.selection()
                 }
             XPBar(progress: s.progress, tint: tint)
+            Button { AppRouter.shared.chat(about: nil) } label: {
+                Label("Поговорить", systemImage: "bubble.left.and.bubble.right.fill")
+                    .font(.subheadline.weight(.semibold))
+                    .frame(maxWidth: .infinity, minHeight: 46)
+                    .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(tint.opacity(0.16)))
+                    .foregroundStyle(tint)
+            }
+            .buttonStyle(PressableStyle())
         }
         .padding(18)
         .card(radius: 32, tint: tint)
+    }
+
+    /// Угощения и подсказка, как играть.
+    private func playBar(mgr: CompanionManager, tint: Color) -> some View {
+        HStack(spacing: 10) {
+            Button {
+                if mgr.feed() {
+                    feedToken += 1
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
+                        say(["Ням-ням! Спасибо!", "Вкуснятина!", "Ммм, моё любимое!"].randomElement() ?? "Ням!")
+                    }
+                } else {
+                    say("Угощения дают за выполненные привычки и «Устоял»")
+                    Haptics.warning()
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Text("🍓")
+                    Text(mgr.state.treats > 0 ? "Угостить · \(mgr.state.treats)" : "Нет угощений")
+                        .font(.subheadline.weight(.semibold))
+                        .contentTransition(.numericText(value: Double(mgr.state.treats)))
+                }
+                .padding(.horizontal, 14)
+                .frame(minHeight: 40)
+                .background(Capsule().fill(mgr.state.treats > 0 ? AnyShapeStyle(tint.gradient) : AnyShapeStyle(Color.primary.opacity(0.08))))
+                .foregroundStyle(mgr.state.treats > 0 ? Color.white : Color.secondary)
+            }
+            .buttonStyle(PressableStyle())
+            .animation(Motion.smooth, value: mgr.state.treats)
+
+            Spacer(minLength: 0)
+            Text("Погладь, пощекочи, подними и брось")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.trailing)
+        }
+    }
+
+    private func react(_ e: PetEvent, stage: CompanionStage) {
+        let strict = Appearance.shared.s.tone == .strict
+        let line: String?
+        switch e {
+        case .tap: line = CompanionPhrases.tapLine(seed: Int.random(in: 0..<100))
+        case .tickle: line = ["Ха-ха-ха, щекотно!", "Хи-хи, хватит!", "Ой-ой, сдаюсь!"].randomElement()
+        case .petted: line = ["Мурр…", "Как приятно!", "Ещё, пожалуйста", "Обожаю, когда гладят"].randomElement()
+        case .pickedUp: line = ["Ой, я лечу?", "Держи крепче!", "Вжух!"].randomElement()
+        case .thrown: line = ["Уиии!", "Лечууу!"].randomElement()
+        case .landed: line = strict ? "Приземлился." : ["Ух! Ещё раз!", "Мягкая посадка!"].randomElement()
+        case .fed: line = nil
+        case .woke: line = ["Ой, я задремал…", "А? Я тут!", "Потягушки!"].randomElement()
+        case .sleep: line = "Пойду вздремну… Тапни, если нужен"
+        }
+        if let line { say(line) }
+    }
+
+    private func say(_ line: String) {
+        lineTask?.cancel()
+        withAnimation(Motion.smooth) { tapLine = line }
+        lineTask = Task {
+            try? await Task.sleep(for: .seconds(2.4))
+            guard !Task.isCancelled else { return }
+            withAnimation(Motion.smooth) { tapLine = nil }
+        }
     }
 
     // MARK: - Опыт

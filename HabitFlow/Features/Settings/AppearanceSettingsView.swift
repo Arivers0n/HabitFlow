@@ -251,3 +251,43 @@ struct BackgroundSwatch: View {
         }
     }
 }
+
+// MARK: - Оформление: вкладки «Тема / Иконки / Экран»
+
+struct LookSettingsView: View {
+    enum Tab: String, CaseIterable, Identifiable {
+        case theme, icons, screen
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .theme: "Тема"
+            case .icons: "Иконки"
+            case .screen: "Экран"
+            }
+        }
+    }
+
+    @State var tab: Tab
+
+    var body: some View {
+        Group {
+            switch tab {
+            case .theme: AppearanceSettingsView()
+            case .icons: IconPickerView()
+            case .screen: HomeSettingsView()
+            }
+        }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            Picker("Раздел", selection: $tab.animation(Motion.smooth)) {
+                ForEach(Tab.allCases) { Text($0.title).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(.bar)
+            .onChange(of: tab) { _, _ in Haptics.selection() }
+        }
+        .navigationTitle("Оформление")
+        .navigationBarTitleDisplayMode(.inline)
+    }
+}

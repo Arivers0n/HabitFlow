@@ -7,6 +7,11 @@ struct LevelUpView: View {
     let status: CompanionStatus
     var onClose: () -> Void
     @State private var appear = false
+    @State private var hatchToken = 0
+    @State private var born = false
+
+    /// Яйцо ещё не разбилось — показываем 3D-заставку вылупления.
+    private var waitingHatch: Bool { event.hatched && !born }
 
     var body: some View {
         let tint = Color(hex: status.character.tintHex)
@@ -14,18 +19,31 @@ struct LevelUpView: View {
         config.mood = .happy
         config.isNight = false
         return ZStack {
-            Rectangle().fill(.black.opacity(0.6)).ignoresSafeArea().onTapGesture(perform: onClose)
-            if Motion.enabled {
+            Rectangle().fill(.black.opacity(0.6)).ignoresSafeArea().onTapGesture { if !waitingHatch { onClose() } }
+            if Motion.enabled && !waitingHatch {
                 Confetti(colors: [tint, .white, Color(hex: "FFD60A"), Appearance.shared.accent])
                     .ignoresSafeArea()
                     .allowsHitTesting(false)
             }
             VStack(spacing: 14) {
-                CompanionScene(config: config, size: 230)
-                    .scaleEffect(appear ? 1 : 0.6)
-                Text(event.hatched ? "\(status.character.name) вылупился!" : "Уровень \(event.level)!")
+                ZStack {
+                    if event.hatched && !born {
+                        Egg3DView(tintHex: status.character.tintHex, seed: status.character.id, progress: 1,
+                                  interactive: false, fill: 0.45, hatchToken: hatchToken,
+                                  onHatched: { withAnimation(Motion.bouncy ?? .default) { born = true } })
+                            .frame(width: 260, height: 260)
+                            .transition(.opacity)
+                    } else {
+                        CompanionScene(config: config, size: 230)
+                            .transition(.scale(scale: 0.2).combined(with: .opacity))
+                    }
+                }
+                .frame(height: 230)
+                .scaleEffect(appear ? 1 : 0.6)
+                Text(waitingHatch ? "Кто-то стучится изнутри…" : (event.hatched ? "\(status.character.name) вылупился!" : "Уровень \(event.level)!"))
                     .font(.title.weight(.bold))
                     .multilineTextAlignment(.center)
+                    .contentTransition(.opacity)
                 if let st = event.stageChanged, !event.hatched {
                     Text("Новая стадия: \(st.title.lowercased())")
                         .font(.subheadline.weight(.semibold))
@@ -54,6 +72,8 @@ struct LevelUpView: View {
                 Button("Ура!", action: onClose)
                     .buttonStyle(PrimaryButtonStyle(color: tint))
                     .padding(.top, 4)
+                    .opacity(waitingHatch ? 0 : 1)
+                    .disabled(waitingHatch)
             }
             .padding(22)
             .frame(maxWidth: 360)
@@ -62,7 +82,16 @@ struct LevelUpView: View {
             .scaleEffect(appear ? 1 : 0.85)
             .opacity(appear ? 1 : 0)
         }
-        .onAppear { withAnimation(Motion.bouncy ?? .default) { appear = true } }
+        .onAppear {
+            withAnimation(Motion.bouncy ?? .default) { appear = true }
+            if event.hatched {
+                if Motion.enabled {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { hatchToken += 1 }
+                } else {
+                    born = true
+                }
+            }
+        }
     }
 }
 

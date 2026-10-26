@@ -5,6 +5,7 @@ struct NewHabitGallery: View {
     @Environment(\.dismiss) private var dismiss
     @State private var kind: HabitKind = .build
     @State private var path: [HabitDraft] = []
+    @State private var showAI = false
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -22,6 +23,27 @@ struct NewHabitGallery: View {
                          : "Счётчик времени без срыва. Срыв сбросит серию, но рекорд и история останутся.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
+
+                    Button { showAI = true; Haptics.tap() } label: {
+                        HStack(spacing: 14) {
+                            Image(systemName: "sparkles")
+                                .font(.title3.weight(.semibold))
+                                .foregroundStyle(.white)
+                                .frame(width: 46, height: 46)
+                                .background(RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .fill(LinearGradient(colors: [Color(hex: "4C8DFF"), Color(hex: "B65CFF")],
+                                                         startPoint: .topLeading, endPoint: .bottomTrailing)))
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Описать словами").font(.headline)
+                                Text("ИИ сам разложит на привычки и цели").font(.subheadline).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right").foregroundStyle(.tertiary)
+                        }
+                        .padding(16)
+                        .card(radius: 22)
+                    }
+                    .buttonStyle(PressableStyle())
 
                     Button {
                         var d = HabitDraft()
@@ -71,6 +93,7 @@ struct NewHabitGallery: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Отмена") { dismiss() } }
             }
+            .sheet(isPresented: $showAI) { AIHabitComposer(onAdded: { dismiss() }) }
             .navigationDestination(for: HabitDraft.self) { d in
                 HabitEditorForm(draft: d, habit: nil) { dismiss() }
             }

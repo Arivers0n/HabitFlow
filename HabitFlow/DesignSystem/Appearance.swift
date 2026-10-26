@@ -168,6 +168,19 @@ final class Appearance {
         let ud = UserDefaults.standard
         s = (ud.data(forKey: Self.key)).flatMap { try? JSONDecoder().decode(AppSettings.self, from: $0) } ?? AppSettings()
         customPresets = (ud.data(forKey: Self.presetsKey)).flatMap { try? JSONDecoder().decode([ThemePreset].self, from: $0) } ?? []
+        PrefSync.register("appearance", export: { [weak self] in
+            guard let self else { return nil }
+            return try? JSONEncoder().encode(SyncedLook(settings: self.s, presets: self.customPresets))
+        }, apply: { [weak self] data in
+            guard let self, let look = try? JSONDecoder().decode(SyncedLook.self, from: data) else { return }
+            self.s = look.settings
+            self.customPresets = look.presets
+        })
+    }
+
+    private struct SyncedLook: Codable {
+        var settings: AppSettings
+        var presets: [ThemePreset]
     }
 
     var accent: Color { Color(hex: s.accentHex) }
@@ -199,10 +212,12 @@ final class Appearance {
 
     private func persist() {
         if let data = try? JSONEncoder().encode(s) { UserDefaults.standard.set(data, forKey: Self.key) }
+        PrefSync.markChanged("appearance")
     }
 
     private func persistPresets() {
         if let data = try? JSONEncoder().encode(customPresets) { UserDefaults.standard.set(data, forKey: Self.presetsKey) }
+        PrefSync.markChanged("appearance")
     }
 }
 

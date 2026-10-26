@@ -23,6 +23,8 @@ struct HabitDraft: Equatable {
     var baselinePerDay: Double = 0
     var costPerUnit: Double = 0
 
+    var shareMode: Int = 0
+
     var reminderOn: Bool = false
     var reminderTime: Date = Calendar.habitFlow.date(bySettingHour: 20, minute: 0, second: 0, of: .now) ?? .now
 
@@ -52,6 +54,7 @@ struct HabitDraft: Equatable {
         baselinePerDay = h.baselinePerDay
         costPerUnit = h.costPerUnit
         reminderOn = h.reminderOn
+        shareMode = h.shareMode
         let cal = Calendar.habitFlow
         reminderTime = cal.date(bySettingHour: h.reminderMinutes / 60, minute: h.reminderMinutes % 60, second: 0, of: .now) ?? .now
     }
@@ -79,6 +82,7 @@ struct HabitDraft: Equatable {
         h.baselinePerDay = max(0, baselinePerDay)
         h.costPerUnit = max(0, costPerUnit)
         h.reminderOn = reminderOn
+        h.shareMode = shareMode
         let comps = Calendar.habitFlow.dateComponents([.hour, .minute], from: reminderTime)
         h.reminderMinutes = (comps.hour ?? 20) * 60 + (comps.minute ?? 0)
     }

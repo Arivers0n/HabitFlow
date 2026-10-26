@@ -30,7 +30,7 @@ struct CompanionCard: View {
         if let s = mgr.status(all) {
             let tint = Color(hex: s.character.tintHex)
             HStack(alignment: .center, spacing: 10) {
-                CompanionScene(config: .from(s), size: 128) { react() }
+                CompanionScene(config: .from(s), size: 128, onTap: { react() })
                     .padding(.leading, -6)
 
                 VStack(alignment: .leading, spacing: 8) {

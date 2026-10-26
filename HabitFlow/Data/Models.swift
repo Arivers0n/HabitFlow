@@ -40,6 +40,13 @@ final class Habit {
     /// До какого числа дней уже показали поздравление — чтобы не повторять.
     var celebratedDays: Int = 0
 
+    /// Показывать друзьям: 0 — авто (полезные да, вредные нет), 1 — да, 2 — нет.
+    var shareMode: Int = 0
+
+    // Синхронизация
+    var updatedAt: Date = Date()
+    var dirty: Bool = true
+
     @Relationship(deleteRule: .cascade, inverse: \CheckIn.habit)
     var checkIns: [CheckIn] = []
 
@@ -62,6 +69,8 @@ final class Habit {
 @Model
 final class CheckIn {
     var id: UUID = UUID()
+    var updatedAt: Date = Date()
+    var dirty: Bool = true
     var date: Date = Date()
     var value: Double = 1
     var habit: Habit?
@@ -76,6 +85,8 @@ final class CheckIn {
 @Model
 final class Relapse {
     var id: UUID = UUID()
+    var updatedAt: Date = Date()
+    var dirty: Bool = true
     var date: Date = Date()
     var amount: Double = 1
     var trigger: String = ""
@@ -94,12 +105,47 @@ final class Relapse {
 @Model
 final class Resist {
     var id: UUID = UUID()
+    var updatedAt: Date = Date()
+    var dirty: Bool = true
     var date: Date = Date()
     var habit: Habit?
 
     init(date: Date) {
         self.id = UUID()
         self.date = date
+    }
+}
+
+// MARK: - Синхронизация
+
+/// Общее для всех синхронизируемых записей.
+protocol SyncStamped: AnyObject {
+    var id: UUID { get }
+    var updatedAt: Date { get set }
+    var dirty: Bool { get set }
+}
+
+extension Habit: SyncStamped {}
+extension CheckIn: SyncStamped {}
+extension Relapse: SyncStamped {}
+extension Resist: SyncStamped {}
+
+extension SyncStamped {
+    /// Отметить локальное изменение — уйдёт на сервер при следующей синхронизации.
+    func touch() {
+        updatedAt = Date()
+        dirty = true
+    }
+}
+
+extension Habit {
+    /// Видна ли привычка друзьям.
+    var isShared: Bool {
+        switch shareMode {
+        case 1: true
+        case 2: false
+        default: kind == .build
+        }
     }
 }
 
