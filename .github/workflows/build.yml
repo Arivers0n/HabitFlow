@@ -1,0 +1,82 @@
+name: Build IPA
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Выбрать самый новый Xcode
+        run: |
+          XC=$(ls -d /Applications/Xcode_*.app | grep -v -i beta | sort -V | tail -1)
+          echo "Using $XC"
+          sudo xcode-select -s "$XC"
+          xcodebuild -version
+          swift --version
+
+      - name: Тесты доменного слоя (стрики, награды, статистика)
+        run: |
+          swiftc HabitFlow/Domain/*.swift Tests/DomainTests/main.swift -o domain-tests
+          ./domain-tests
+
+      - name: XcodeGen
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: Сборка
+        run: |
+          set -o pipefail
+          xcodebuild archive \
+            -project HabitFlow.xcodeproj \
+            -scheme HabitFlow \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/HabitFlow.xcarchive \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            2>&1 | tee build.log | grep -E "error:|warning: .*\.swift|BUILD|ARCHIVE" || true
+          code=${PIPESTATUS[0]}
+          echo "---- ошибки ----"
+          grep -E "error:" build.log | sort -u | head -100 || true
+          echo "---- предупреждения Swift ----"
+          grep -E "\.swift:[0-9]+:[0-9]+: warning" build.log | sort -u | head -60 || true
+          test -d build/HabitFlow.xcarchive/Products/Applications/HabitFlow.app || exit 1
+          exit $code
+
+      - name: Упаковать .ipa
+        run: |
+          mkdir -p Payload
+          cp -R build/HabitFlow.xcarchive/Products/Applications/HabitFlow.app Payload/
+          zip -qr HabitFlow.ipa Payload
+          ls -lh HabitFlow.ipa
+          size=$(stat -f%z HabitFlow.ipa)
+          if [ "$size" -lt 300000 ]; then echo "ipa подозрительно маленький: $size байт"; exit 1; fi
+          /usr/libexec/PlistBuddy -c "Print :CFBundleIcons:CFBundleAlternateIcons" Payload/HabitFlow.app/Info.plist | grep -c "AppIcon-" || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: HabitFlow-ipa
+          path: HabitFlow.ipa
+
+      - name: Релиз latest
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: HabitFlow (последняя сборка)
+          body: "Неподписанный .ipa. Подпишите своим сертификатом (ESign, Sideloadly и т.п.). Сборка ${{ github.sha }}."
+          files: HabitFlow.ipa
+          make_latest: true
+          prerelease: false
