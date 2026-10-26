@@ -15,7 +15,7 @@ struct SceneConfig: Equatable {
     @MainActor
     static func from(_ s: CompanionStatus) -> SceneConfig {
         let manager = CompanionManager.shared
-        SceneConfig(character: s.character, stage: s.stage, mood: s.mood, isNight: s.isNight,
+        return SceneConfig(character: s.character, stage: s.stage, mood: s.mood, isNight: s.isNight,
                     eggProgress: s.stage == .egg ? s.progress.fraction : 0,
                     headwear: s.stage == .egg ? nil : manager.state.headwear,
                     aura: s.stage == .egg ? nil : manager.state.aura,
