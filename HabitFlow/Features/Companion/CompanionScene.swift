@@ -257,6 +257,33 @@ struct CompanionScene: View {
         }
         m.tilt = config.mood == .sad || sleeping ? -4 : (config.mood == .happy ? 2.5 * sin(t * speed * 0.5) : 0)
 
+        // Сам по себе: раз в несколько секунд подпрыгивает, оглядывается или пританцовывает
+        if !held && !sleeping && config.mood != .sad && now.timeIntervalSince(sim.lastInteraction) > 3 {
+            let period = config.mood == .happy ? 6.0 : 9.0
+            let slot = Int(t / period)
+            let local = t - Double(slot) * period
+            let kind = (slot &* 7919 &+ config.character.id.count) % 5
+            if local < 1.1 {
+                let p = local / 1.1
+                switch kind {
+                case 0:
+                    // подпрыжка
+                    if p < 0.5 { m.dy -= CGFloat(sin(.pi * p * 2)) * g.charH * 0.08 }
+                case 1:
+                    // оглядывается: разворот и обратно
+                    m.sx *= CGFloat(cos(.pi * 2 * p))
+                case 2:
+                    // пританцовывает
+                    m.tilt += 8 * sin(p * .pi * 4) * (1 - p)
+                case 3:
+                    // потягивается
+                    m.squash -= CGFloat(0.08 * sin(.pi * p))
+                default:
+                    break
+                }
+            }
+        }
+
         // В руке — болтается, в полёте — кувыркается по скорости
         if sim.hold == .holding {
             m.tilt = Double(max(-25, min(25, sim.velocity.width / 40)))

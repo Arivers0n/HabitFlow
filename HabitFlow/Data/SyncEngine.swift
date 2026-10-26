@@ -46,6 +46,8 @@ final class SyncEngine {
     private(set) var context: ModelContext?
     private var pushTask: Task<Void, Never>?
     private var running = false
+    private var lastProfileAt = Date.distantPast
+    private var needsAnother = false
 
     var server: String {
         get { ServerDefaults.current }
@@ -275,17 +277,25 @@ final class SyncEngine {
             await checkModule()
             guard moduleAvailable else { state = .idle; return }
         }
-        guard !running else { return }
+        guard !running else { needsAnother = true; return }
         running = true
         state = .syncing
-        defer { running = false }
+        defer {
+            running = false
+            // Пока шла синхронизация, могли появиться новые правки — отправим и их.
+            if needsAnother { needsAnother = false; schedulePush() }
+        }
         do {
             try await push(ctx)
             if pullToo { try await pull(ctx) }
             lastSync = .now
             UserDefaults.standard.set(lastSync, forKey: "hf.lastSync")
             state = .idle
-            await publishProfile(ctx)
+            // Карточку для друзей обновляем при полной синхронизации или раз в пару минут.
+            if pullToo || Date().timeIntervalSince(lastProfileAt) > 120 {
+                lastProfileAt = .now
+                await publishProfile(ctx)
+            }
         } catch let e as APIError where e.status == 404 {
             moduleAvailable = false
             UserDefaults.standard.set(false, forKey: "hf.module")
@@ -413,7 +423,7 @@ final class SyncEngine {
         }
         let seen = UserDefaults.standard.double(forKey: "hf.cheersSeen")
         let fresh = list.filter { $0.ts > seen }.sorted { $0.ts < $1.ts }
-        if !fresh.isEmpty {
+        if !fresh.isEmpty && fresh != newCheers {
             newCheers = fresh
             Haptics.success()
         }
