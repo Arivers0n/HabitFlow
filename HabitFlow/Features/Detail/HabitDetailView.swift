@@ -152,10 +152,7 @@ struct HabitDetailView: View {
     }
 
     private var quitActions: some View {
-        Button { relapsing = true; Haptics.tap() } label: {
-            Label(Copy.relapseButton, systemImage: "exclamationmark.triangle.fill")
-        }
-        .buttonStyle(PrimaryButtonStyle(color: Palette.danger))
+        QuitActions(habit: habit, onRelapse: { relapsing = true }, large: true)
     }
 
     // MARK: - Плитки

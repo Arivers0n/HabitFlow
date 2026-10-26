@@ -175,5 +175,106 @@ check(pluralDays(1) == "1 день" && pluralDays(3) == "3 дня" && pluralDays
 check(DurationText.compact(90061) == "1 д 1 ч", "длительность компактно")
 check(DurationText.human(3 * 3600) == "3 часа", "длительность словами")
 
+// MARK: Напарник: опыт
+
+let comp = CompanionEngine(calendar: cal)
+
+do {
+    // Вода (ежедневно) выполнена 24, 25, 26; чтение (ежедневно) только 25 → идеальный день один (25-е)
+    let water = HabitSnapshot(kind: .build, startDate: day(2026, 10, 24),
+                              checkIns: checks([24, 25, 26].map { day(2026, 10, $0) }))
+    let read = HabitSnapshot(kind: .build, startDate: day(2026, 10, 24),
+                             checkIns: checks([25].map { day(2026, 10, $0) }))
+    let x = comp.xp([water, read], now: now)
+    check(x.habits == 40, "XP: 4 выполнения × 10, получили \(x.habits)")
+    check(x.perfectDays == 30, "XP: один идеальный день, получили \(x.perfectDays)")
+    check(x.today == 10, "XP сегодня: только вода, получили \(x.today)")
+}
+
+do {
+    // Объём: две отметки по 1000 мл в один день — это одно выполнение, а не два
+    let goal = Goal(target: 2000, unit: "мл", step: 250)
+    let h = HabitSnapshot(kind: .build, startDate: day(2026, 10, 26), goal: goal,
+                          checkIns: checks([day(2026, 10, 26, 9), day(2026, 10, 26, 15)], value: 1000))
+    let x = comp.xp([h], now: now)
+    check(x.habits == 10 && x.perfectDays == 30, "XP: объём засчитан один раз + идеальный день")
+}
+
+do {
+    // «3 раза в неделю» не требуется каждый день для идеального дня
+    let sport = HabitSnapshot(kind: .build, startDate: day(2026, 10, 20), schedule: .timesPerWeek(3),
+                              checkIns: checks([day(2026, 10, 21)]))
+    let water = HabitSnapshot(kind: .build, startDate: day(2026, 10, 26), checkIns: checks([day(2026, 10, 26)]))
+    let x = comp.xp([sport, water], now: now)
+    check(x.perfectDays == 30, "XP: идеальный день не ломается привычкой N/нед, получили \(x.perfectDays)")
+}
+
+do {
+    // Отказ с 20-го 10:00. Полные сутки: 21–25 (5 дней), срыв 23-го → 4 чистых
+    let h = HabitSnapshot(kind: .quit, startDate: day(2026, 10, 20, 10),
+                          relapses: [RelapseValue(date: day(2026, 10, 23, 20), amount: 1, trigger: "")])
+    let x = comp.xp([h], now: now)
+    check(x.cleanDays == 60, "XP: 4 чистых дня × 15, получили \(x.cleanDays)")
+    check(x.today == 15, "XP сегодня: вчерашние чистые сутки")
+}
+
+do {
+    // «Устоял»: 5 раз за день, засчитываются 3
+    let ts = (0..<5).map { day(2026, 10, 26, 8 + $0) }
+    let h = HabitSnapshot(kind: .quit, startDate: day(2026, 10, 26, 7), resisted: ts)
+    let x = comp.xp([h], now: now)
+    check(x.resisted == 15, "XP: «устоял» не больше 3 раз в день")
+    check(comp.resistReward(h, now: now) == 0, "XP: лимит исчерпан — награда 0")
+}
+
+// MARK: Напарник: уровни
+
+check(XPRules.totalXP(forLevel: 1) == 0 && XPRules.totalXP(forLevel: 2) == 60 && XPRules.totalXP(forLevel: 3) == 180, "уровни: пороги")
+check(XPRules.level(for: 59) == 1 && XPRules.level(for: 60) == 2 && XPRules.level(for: 600) == 5, "уровни: расчёт")
+check(XPRules.level(for: 10_000_000) == XPRules.maxLevel, "уровни: потолок")
+check(XPRules.stage(for: 1) == .egg && XPRules.stage(for: 2) == .baby && XPRules.stage(for: 5) == .teen && XPRules.stage(for: 10) == .adult, "стадии")
+let lp = LevelProgress(xp: 120)
+check(lp.level == 2 && lp.xpInLevel == 60 && lp.xpForNext == 120 && abs(lp.fraction - 0.5) < 0.001, "прогресс уровня")
+
+// MARK: Напарник: настроение
+
+do {
+    let relapse = HabitSnapshot(kind: .quit, startDate: day(2026, 10, 1),
+                                relapses: [RelapseValue(date: day(2026, 10, 26, 10), amount: 1, trigger: "")])
+    let water = HabitSnapshot(kind: .build, startDate: day(2026, 10, 1), checkIns: checks([day(2026, 10, 26)]))
+    check(comp.mood([relapse, water], gapSinceLastOpen: nil, now: now) == .caring, "настроение: срыв важнее успехов")
+    let idle = HabitSnapshot(kind: .build, startDate: day(2026, 10, 1), checkIns: checks([day(2026, 10, 25)]))
+    check(comp.mood([idle], gapSinceLastOpen: 3 * 86_400, now: day(2026, 10, 26, 9)) == .sad, "настроение: не заходил 3 дня")
+    check(comp.mood([water], gapSinceLastOpen: 3 * 86_400, now: now) == .happy, "настроение: вернулся и сделал — снова рад")
+    check(comp.mood([water], gapSinceLastOpen: 3600, now: now) == .happy, "настроение: цели выполнены")
+    let lazy = HabitSnapshot(kind: .build, startDate: day(2026, 10, 1))
+    check(comp.mood([lazy], gapSinceLastOpen: 3600, now: now) == .sad, "настроение: вчера пропуск, сегодня пусто после обеда")
+    check(comp.mood([lazy], gapSinceLastOpen: 3600, now: day(2026, 10, 26, 9)) == .calm, "настроение: утром ещё спокоен")
+    check(comp.questHabit([water, lazy], now: now) != nil, "просьба: есть невыполненная привычка")
+}
+
+// MARK: Напарник: фразы
+
+do {
+    let ctx = PhraseContext(userName: "Андрей", mood: .caring, hour: 15, today: DaySummary(due: 2, done: 0, doneAny: 0),
+                            quest: nil, bestQuit: nil, level: 3, stage: .baby, strict: false)
+    let line = CompanionPhrases.pick(ctx, seed: 0)
+    check(line.contains("Андрей") && !line.contains("%"), "фразы: обращение по имени, без меток")
+    var anon = ctx; anon.userName = ""
+    let l2 = CompanionPhrases.pick(anon, seed: 0)
+    check(!l2.contains(", ,") && !l2.contains("%") && !l2.contains(" !"), "фразы: без имени текст чистый")
+    for m in CompanionMood.allCases {
+        for hour in [3, 8, 14, 20] {
+            for seed in 0..<16 {
+                var c = ctx; c.mood = m; c.hour = hour; c.quest = "Вода"; c.bestQuit = ("Курение", 15)
+                c.today = DaySummary(due: 3, done: 2, doneAny: 2); c.strict = seed % 2 == 0
+                let t = CompanionPhrases.pick(c, seed: seed)
+                if t.contains("%") || t.isEmpty { check(false, "фразы: метка не заменена: \(t)") }
+            }
+        }
+    }
+    check(true, "фразы: все комбинации без пропущенных меток")
+}
+
 print(failures == 0 ? "✓ Все \(passed) проверок прошли" : "Провалено: \(failures), прошло: \(passed)")
 exit(failures == 0 ? 0 : 1)

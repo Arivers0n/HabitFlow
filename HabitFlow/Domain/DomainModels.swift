@@ -50,15 +50,20 @@ struct HabitSnapshot: Sendable {
     var goal: Goal
     var checkIns: [CheckInValue]
     var relapses: [RelapseValue]
+    /// Моменты, когда устоял перед искушением (только для отказа).
+    var resisted: [Date]
+    var name: String
 
     init(kind: HabitKind, startDate: Date, schedule: Schedule = .daily, goal: Goal = .check,
-         checkIns: [CheckInValue] = [], relapses: [RelapseValue] = []) {
+         checkIns: [CheckInValue] = [], relapses: [RelapseValue] = [], resisted: [Date] = [], name: String = "") {
         self.kind = kind
         self.startDate = startDate
         self.schedule = schedule
         self.goal = goal
         self.checkIns = checkIns
         self.relapses = relapses
+        self.resisted = resisted
+        self.name = name
     }
 }
 

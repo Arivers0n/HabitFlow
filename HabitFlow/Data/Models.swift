@@ -46,6 +46,10 @@ final class Habit {
     @Relationship(deleteRule: .cascade, inverse: \Relapse.habit)
     var relapses: [Relapse] = []
 
+    /// «Устоял перед искушением» — для отказа от вредного.
+    @Relationship(deleteRule: .cascade, inverse: \Resist.habit)
+    var resists: [Resist] = []
+
     init(name: String = "", kind: HabitKind = .build) {
         self.id = UUID()
         self.name = name
@@ -87,6 +91,18 @@ final class Relapse {
     }
 }
 
+@Model
+final class Resist {
+    var id: UUID = UUID()
+    var date: Date = Date()
+    var habit: Habit?
+
+    init(date: Date) {
+        self.id = UUID()
+        self.date = date
+    }
+}
+
 // MARK: - Мост к доменным типам
 
 extension Habit {
@@ -120,7 +136,9 @@ extension Habit {
     var snapshot: HabitSnapshot {
         HabitSnapshot(kind: kind, startDate: startDate, schedule: schedule, goal: goal,
                       checkIns: checkIns.map { CheckInValue(date: $0.date, value: $0.value) },
-                      relapses: relapses.map { RelapseValue(date: $0.date, amount: $0.amount, trigger: $0.trigger) })
+                      relapses: relapses.map { RelapseValue(date: $0.date, amount: $0.amount, trigger: $0.trigger) },
+                      resisted: resists.map(\.date),
+                      name: name)
     }
 
     var sortedRelapses: [Relapse] { relapses.sorted { $0.date > $1.date } }

@@ -25,6 +25,9 @@ struct TodayView: View {
         NavigationStack {
             List {
                 Group {
+                    if CompanionManager.shared.hasCompanion && CompanionManager.shared.state.showOnToday {
+                        CompanionCard()
+                    }
                     if ap.s.showSummary {
                         SummaryHeader(build: build, quit: quit, day: selectedDay)
                     }

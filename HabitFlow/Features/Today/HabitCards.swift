@@ -204,15 +204,6 @@ struct QuitHabitCard: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Button(action: { onRelapse(); Haptics.tap() }) {
-                    Text(Copy.relapseButton)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(Palette.danger)
-                        .padding(.horizontal, 14)
-                        .frame(minHeight: 40)
-                        .background(Capsule().fill(Palette.danger.opacity(0.14)))
-                }
-                .buttonStyle(PressableStyle())
             }
 
             TimelineView(.periodic(from: .now, by: ap.s.liveSeconds ? 1 : 30)) { ctx in
@@ -229,6 +220,8 @@ struct QuitHabitCard: View {
                     }
                 }
             }
+
+            QuitActions(habit: habit, onRelapse: onRelapse)
         }
         .padding(16)
         .card(tint: color)
@@ -245,6 +238,46 @@ struct QuitHabitCard: View {
             text += " · \(NumberText.value((avoided * habit.costPerUnit).rounded(.down))) ₽"
         }
         return text
+    }
+}
+
+/// Две крупные кнопки под большой палец: «Устоял» и «Был срыв».
+struct QuitActions: View {
+    @Environment(HabitStore.self) private var store
+    let habit: Habit
+    var onRelapse: () -> Void
+    var large = false
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Button {
+                let xp = store.recordResist(habit)
+                CompanionManager.shared.showResist(habit, xp: xp)
+            } label: {
+                pill("Устоял", "hand.raised.fill", Palette.success)
+            }
+            .buttonStyle(PressableStyle())
+            .accessibilityHint("Отметить, что удалось не поддаться искушению")
+
+            Button {
+                onRelapse()
+                Haptics.tap()
+            } label: {
+                pill(Copy.relapseButton, "exclamationmark.triangle.fill", Palette.danger)
+            }
+            .buttonStyle(PressableStyle())
+        }
+    }
+
+    private func pill(_ title: String, _ symbol: String, _ color: Color) -> some View {
+        Label(title, systemImage: symbol)
+            .font((large ? Font.headline : .subheadline).weight(.semibold))
+            .foregroundStyle(large ? Color.white : color)
+            .frame(maxWidth: .infinity, minHeight: large ? 56 : 44)
+            .background(
+                RoundedRectangle(cornerRadius: large ? 18 : 14, style: .continuous)
+                    .fill(large ? AnyShapeStyle(color.gradient) : AnyShapeStyle(color.opacity(0.15)))
+            )
     }
 }
 

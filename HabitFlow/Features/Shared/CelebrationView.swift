@@ -73,7 +73,7 @@ struct CelebrationView: View {
 }
 
 /// Лёгкое конфетти на Canvas: частицы вылетают снизу-вверх и падают под гравитацией.
-private struct Confetti: View {
+struct Confetti: View {
     let colors: [Color]
     @State private var start = Date.now
     @State private var particles: [Particle] = (0..<70).map { _ in Particle.random() }

@@ -121,6 +121,17 @@ final class HabitStore {
         return before
     }
 
+    /// «Устоял перед искушением». Возвращает, сколько опыта это дало (0 после трёх раз за день).
+    @discardableResult
+    func recordResist(_ h: Habit) -> Int {
+        let reward = CompanionEngine().resistReward(h.snapshot)
+        let r = Resist(date: .now)
+        context.insert(r)
+        r.habit = h
+        save()
+        return reward
+    }
+
     func deleteRelapse(_ r: Relapse) {
         context.delete(r)
         save()
@@ -175,6 +186,7 @@ final class HabitStore {
         try? context.delete(model: Habit.self)
         try? context.delete(model: CheckIn.self)
         try? context.delete(model: Relapse.self)
+        try? context.delete(model: Resist.self)
         save()
         NotificationService.cancelAll()
     }

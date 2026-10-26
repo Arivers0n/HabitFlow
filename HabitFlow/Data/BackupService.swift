@@ -37,6 +37,7 @@ enum BackupService {
         var celebratedDays: Int
         var checkIns: [CheckInDTO]
         var relapses: [RelapseDTO]
+        var resists: [Date]?
     }
 
     struct CheckInDTO: Codable { var date: Date; var value: Double }
@@ -52,7 +53,8 @@ enum BackupService {
                      costPerUnit: h.costPerUnit, reminderOn: h.reminderOn, reminderMinutes: h.reminderMinutes,
                      celebratedDays: h.celebratedDays,
                      checkIns: h.checkIns.map { CheckInDTO(date: $0.date, value: $0.value) },
-                     relapses: h.relapses.map { RelapseDTO(date: $0.date, amount: $0.amount, trigger: $0.trigger, note: $0.note) })
+                     relapses: h.relapses.map { RelapseDTO(date: $0.date, amount: $0.amount, trigger: $0.trigger, note: $0.note) },
+                     resists: h.resists.map(\.date))
         })
         let enc = JSONEncoder()
         enc.dateEncodingStrategy = .iso8601
@@ -110,6 +112,11 @@ enum BackupService {
                 let rel = Relapse(date: r.date, amount: r.amount, trigger: r.trigger, note: r.note)
                 context.insert(rel)
                 rel.habit = h
+            }
+            for date in d.resists ?? [] {
+                let rs = Resist(date: date)
+                context.insert(rs)
+                rs.habit = h
             }
             NotificationService.sync(h)
             added += 1

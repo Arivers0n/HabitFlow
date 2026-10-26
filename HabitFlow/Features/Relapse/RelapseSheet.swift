@@ -24,7 +24,22 @@ struct RelapseSheet: View {
             ScrollView {
                 VStack(spacing: 16) {
                     VStack(spacing: 10) {
-                        HabitIcon(symbol: habit.symbol, color: habit.color, size: 56)
+                        if let c = CompanionManager.shared.character {
+                            CompanionScene(config: SceneConfig(character: c,
+                                                               stage: max(XPRules.stage(for: CompanionManager.shared.state.lastSeenLevel), .baby),
+                                                               mood: .caring,
+                                                               headwear: CompanionManager.shared.state.headwear,
+                                                               decor: []),
+                                           size: 170)
+                            Text(CompanionManager.shared.caringLine())
+                                .font(.subheadline)
+                                .multilineTextAlignment(.center)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 10)
+                                .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(Color.primary.opacity(0.07)))
+                        } else {
+                            HabitIcon(symbol: habit.symbol, color: habit.color, size: 56)
+                        }
                         Text(Copy.relapseTitle)
                             .font(.title3.weight(.bold))
                             .multilineTextAlignment(.center)
