@@ -184,7 +184,8 @@ extension Habit {
                       checkIns: checkIns.map { CheckInValue(date: $0.date, value: $0.value) },
                       relapses: relapses.map { RelapseValue(date: $0.date, amount: $0.amount, trigger: $0.trigger) },
                       resisted: resists.map(\.date),
-                      name: name)
+                      name: name,
+                      isArchived: isArchived)
     }
 
     var sortedRelapses: [Relapse] { relapses.sorted { $0.date > $1.date } }

@@ -32,6 +32,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         UNUserNotificationCenter.current().delegate = self
+        QuickCardsService.registerCategories()
+        WatchLink.shared.start()
         application.shortcutItems = [
             UIApplicationShortcutItem(type: "new", localizedTitle: "Новая привычка", localizedSubtitle: nil,
                                       icon: UIApplicationShortcutIcon(systemImageName: "plus.circle")),
@@ -59,6 +61,19 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
         [.banner, .sound]
+    }
+
+    /// Нажатие на уведомление или на его кнопку.
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                didReceive response: UNNotificationResponse) async {
+        let action = response.actionIdentifier
+        let link = response.notification.request.content.userInfo["link"] as? String
+        if action == QuickCardsService.snoozeAction {
+            await QuickCardsService.scheduleSnooze()
+            return
+        }
+        guard action == UNNotificationDefaultActionIdentifier, let link, let url = URL(string: link) else { return }
+        await MainActor.run { AppRouter.shared.handle(url: url) }
     }
 }
 
@@ -120,6 +135,7 @@ struct RootView: View {
     private var companion: CompanionManager { .shared }
     private var router: AppRouter { .shared }
     private var sync: SyncEngine { .shared }
+    private var relaxOffers: RelaxOfferCenter { .shared }
     private var isTest: Bool { store.isTest }
 
     var body: some View {
@@ -171,6 +187,25 @@ struct RootView: View {
         .sheet(isPresented: Binding(get: { router.showChat }, set: { router.showChat = $0 })) {
             CompanionChatView()
         }
+        .fullScreenCover(isPresented: Binding(get: { router.showCards }, set: { router.showCards = $0 })) {
+            QuickEntryDeck()
+        }
+        .sheet(isPresented: Binding(get: { router.showReview }, set: { router.showReview = $0 })) {
+            WeeklyReviewSheet(habits: allHabits)
+        }
+        .sheet(isPresented: Binding(get: { router.showRelax }, set: { router.showRelax = $0 })) {
+            RelaxSheet()
+        }
+        .overlay(alignment: .bottom) {
+            if let offer = relaxOffers.offer {
+                RelaxOfferBanner(offer: offer,
+                                 onAccept: { withAnimation(Motion.smooth) { relaxOffers.accept() } },
+                                 onDismiss: { withAnimation(Motion.smooth) { relaxOffers.dismiss() } })
+                    .padding(.bottom, 64)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(Motion.bouncy, value: relaxOffers.offer)
         .fullScreenCover(isPresented: Binding(get: { !isTest && (!welcomeDone || !companion.state.onboardingDone) },
                                               set: { _ in })) {
             OnboardingFlow(welcomeDone: $welcomeDone)
@@ -188,6 +223,8 @@ struct RootView: View {
             if let level = status?.level { companion.checkLevel(level) }
             if let p = SceneDelegate.pending { SceneDelegate.pending = nil; SceneDelegate.open(p) }
             HabitFlowShortcuts.updateAppShortcutParameters()
+            Task { await QuickCardsService.shared.reschedule(habits: allHabits) }
+            Task { await HealthService.shared.refresh() }
             Task { await startupSync() }
         }
         .onChange(of: phase) { _, p in
@@ -195,6 +232,8 @@ struct RootView: View {
             companion.registerOpen()
             store.checkAllMilestones(habits)
             HabitFlowShortcuts.updateAppShortcutParameters()
+            Task { await QuickCardsService.shared.reschedule(habits: allHabits) }
+            Task { await HealthService.shared.refresh() }
             Task { await sync.sync() }
         }
     }

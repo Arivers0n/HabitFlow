@@ -35,6 +35,8 @@ targets:
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationPortrait, UIInterfaceOrientationPortraitUpsideDown, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
         ITSAppUsesNonExemptEncryption: false
+        NSHealthShareUsageDescription: Напарник читает сон, шаги и тренировки, чтобы мягко подсказывать, когда лечь спать и сколько пить воды. Данные остаются на устройстве.
+        UIBackgroundModes: [audio]
         CFBundleURLTypes:
           - CFBundleURLName: com.ariverson.habitflow
             CFBundleURLSchemes: [habitflow]

@@ -49,34 +49,35 @@ enum AICoach {
             }
         }
         if let s = CompanionManager.shared.status(habits, now: now) {
-            lines.append("Напарник: уровень \(s.level), настроение «\(s.mood.title)».")
+            let treats = CompanionManager.shared.state.treats
+            lines.append("Напарник: уровень \(s.level), опыт \(s.xp.total), настроение «\(s.mood.title)», угощений \(treats).")
+            if s.today.scheduled > 0 {
+                lines.append("Целей на сегодня: \(s.today.scheduledDone) из \(s.today.scheduled).")
+            }
         }
+        if let avg = MoodLog.shared.average(now: now) {
+            lines.append("Настроение по быстрым карточкам за неделю: в среднем \(String(format: "%.1f", avg)) из 5.")
+        }
+        let health = HealthService.shared.promptText(now: now)
+        if !health.isEmpty { lines.append(health) }
+        // Если данные расходятся сами с собой, напарник может честно сказать разработчику.
+        let report = ConsistencyChecker().check(habits.map(\.snapshot), now: now)
+        let problems = report.promptText(limit: 4)
+        if !problems.isEmpty { lines.append("Замечания проверки данных:\n" + problems) }
         return lines.joined(separator: "\n")
     }
 
-    /// Роль напарника для ИИ.
-    static func persona() -> String {
+    /// Роль напарника для ИИ. Для часов ответ короткий (1–2 предложения).
+    static func persona(channel: AIChannel = .phone, brainstorm: Bool = false) -> String {
         let mgr = CompanionManager.shared
-        let strict = Appearance.shared.s.tone == .strict
-        let user = mgr.state.userName.trimmingCharacters(in: .whitespaces)
-        var p: String
-        if let c = mgr.character {
-            p = "Ты — \(mgr.displayName), \(c.species.lowercased()), напарник пользователя в приложении привычек HabitFlow. Характер: \(c.trait)"
-        } else {
-            p = "Ты — дружелюбный напарник в приложении привычек HabitFlow."
-        }
-        p += """
-
-        Говори по-русски, на «ты», коротко: 2–5 предложений, без списков, если о них не просят. \
-        \(strict ? "Тон прямой и деловой, без сюсюканья, но без упрёков." : "Тон тёплый и поддерживающий.") \
-        \(user.isEmpty ? "" : "Пользователя зовут \(user), иногда обращайся по имени.") \
-        Опирайся на данные о привычках ниже, называй конкретные цифры и привычки. \
-        После срыва никогда не ругай и не стыди: срыв — часть пути, рекорд сохраняется. Помоги понять триггер и предложи один простой план на похожую ситуацию. \
-        Не ставь диагнозов и не назначай лекарств. Если речь о сильной зависимости от алкоголя или о тяжёлом самочувствии, мягко посоветуй обратиться к врачу. \
-        Если человек пишет о желании навредить себе, бережно предложи обратиться к близким и к специалисту или на линию психологической помощи. \
-        Не выдумывай данные, которых нет.
-        """
-        return p
+        let input = PersonaInput(name: mgr.displayName.isEmpty ? "Напарник" : mgr.displayName,
+                                 species: mgr.character?.species,
+                                 trait: mgr.character?.trait,
+                                 userName: mgr.state.userName,
+                                 strict: Appearance.shared.s.tone == .strict,
+                                 channel: channel,
+                                 brainstorm: brainstorm)
+        return PersonaPrompt.build(input)
     }
 
     // MARK: - Привычки из текста
@@ -167,18 +168,71 @@ enum AICoach {
         UserDefaults.standard.string(forKey: weekKey())
     }
 
+    /// Разбор недели по истории: работает без сети и без ИИ.
+    static func offlineReview(_ habits: [Habit], now: Date = .now) -> WeeklyReview {
+        let sleep = HealthService.shared.snapshot?.sleepAverageSeconds
+        return WeeklyReviewBuilder().build(habits.map(\.snapshot), sleepAverage: sleep, now: now)
+    }
+
+    /// Разбор недели: факты считаем сами, ИИ лишь складывает их в живой текст. Нет ИИ или сети — показываем расчёт.
     static func weeklyReview(_ habits: [Habit]) async throws -> String {
+        let review = offlineReview(habits)
+        let strict = Appearance.shared.s.tone == .strict
+        let fallback = review.text(strict: strict)
+        guard !review.isEmpty, AI.available else { return fallback }
+
         let prompt = """
         Данные о привычках:
         \(context(habits))
 
-        Сделай короткий разбор недели: что получается лучше всего (с цифрами), где проседает, \
-        и какие триггеры чаще всего ведут к срывам, если они есть. В конце — один конкретный совет на следующую неделю. \
-        До 120 слов. Можно 3–4 коротких абзаца, без заголовков и без markdown-разметки.
+        Посчитанные факты недели (опирайся на них, ничего не добавляй от себя):
+        \(review.promptFacts)
+
+        Сделай короткий разбор недели от первого лица: сильные стороны (с цифрами), просадки и один-три микро-шага на следующую неделю. \
+        До 120 слов, 3–4 коротких абзаца, без заголовков и без markdown-разметки.
         """
-        let text = try await AI.ask(prompt, system: persona(), model: AI.smartModel, maxTokens: 700)
-        UserDefaults.standard.set(text, forKey: weekKey())
-        return text
+        do {
+            let raw = try await AI.ask(prompt, system: persona(), model: AI.smartModel, maxTokens: 700)
+            let text = ReplyPolish.clean(raw)
+            guard !text.isEmpty else { return fallback }
+            UserDefaults.standard.set(text, forKey: weekKey())
+            return text
+        } catch {
+            return fallback
+        }
+    }
+
+    // MARK: - Идеи
+
+    private static let shownIdeasKey = "hf.ideas.shown"
+
+    /// Следующая идея для мозгового штурма и готовое сообщение, оканчивающееся вопросом «Что скажешь?».
+    static func nextIdea() -> (idea: AppIdea, message: String)? {
+        let shown = UserDefaults.standard.stringArray(forKey: shownIdeasKey) ?? []
+        guard let idea = IdeaBank.next(shown: shown) else { return nil }
+        var list = shown.filter { $0 != idea.id }
+        list.append(idea.id)
+        UserDefaults.standard.set(list, forKey: shownIdeasKey)
+        return (idea, IdeaBank.message(idea, strict: Appearance.shared.s.tone == .strict))
+    }
+
+    // MARK: - Короткий ответ для часов
+
+    static func watchReply(to text: String, habits: [Habit]) async -> String {
+        let system = persona(channel: .watch) + "\n\nДанные о привычках пользователя:\n" + context(habits)
+        do {
+            let answer = try await AI.chat([AI.Message(role: "user", text: text)], system: system, maxTokens: 200)
+            let fit = ReplyPolish.watchFit(answer)
+            if !fit.isEmpty { return fit }
+        } catch {}
+        return offlineWatchLine(habits)
+    }
+
+    /// Ответ часам без сети: одна короткая фраза напарника по состоянию дня.
+    static func offlineWatchLine(_ habits: [Habit]) -> String {
+        let mgr = CompanionManager.shared
+        guard let s = mgr.status(habits) else { return "Привет! Открой HabitFlow на телефоне." }
+        return ReplyPolish.watchFit(mgr.phrase(for: s))
     }
 }
 
@@ -223,7 +277,9 @@ final class CoachChat {
         let system = AICoach.persona() + "\n\nДанные о привычках пользователя:\n" + AICoach.context(habits)
         do {
             let answer = try await AI.chat(Array(messages.suffix(16)), system: system)
-            messages.append(AI.Message(role: "assistant", text: answer))
+            let cleaned = ReplyPolish.clean(answer)
+            guard !cleaned.isEmpty else { throw AIError.badReply }
+            messages.append(AI.Message(role: "assistant", text: cleaned))
             Haptics.soft()
         } catch {
             self.error = error.localizedDescription

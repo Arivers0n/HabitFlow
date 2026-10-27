@@ -105,8 +105,13 @@ struct DaySummary: Equatable, Sendable {
     var done: Int
     /// Выполнено вообще, включая «N раз в неделю».
     var doneAny: Int
+    /// Все цели дня так, как их показывает экран «Сегодня»: строгие привычки и «N раз в неделю».
+    /// Кольцо, «X из Y» и фразы напарника берут числа отсюда, чтобы нигде не расходились.
+    var scheduled: Int = 0
+    var scheduledDone: Int = 0
 
     var ratio: Double? { due > 0 ? Double(done) / Double(due) : nil }
+    var screenRatio: Double? { scheduled > 0 ? Double(scheduledDone) / Double(scheduled) : nil }
 }
 
 struct CompanionEngine: Sendable {
@@ -195,8 +200,13 @@ struct CompanionEngine: Sendable {
             let start = calendar.startOfDay(for: engine.effectiveStart(h))
             guard start <= d else { continue }
             let done = engine.isDone(engine.dailyTotals(h)[d] ?? 0, goal: h.goal)
+            let scheduled = engine.isScheduled(d, h.schedule)
             if done { s.doneAny += 1 }
-            if isStrict(h.schedule) && engine.isScheduled(d, h.schedule) {
+            if scheduled {
+                s.scheduled += 1
+                if done { s.scheduledDone += 1 }
+            }
+            if isStrict(h.schedule) && scheduled {
                 s.due += 1
                 if done { s.done += 1 }
             }

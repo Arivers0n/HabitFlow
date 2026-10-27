@@ -145,8 +145,9 @@ enum CompanionPhrases {
         if roll == 1, let questName = c.quest {
             return fill(choose(c.strict ? questStrict : quest, seed / 4), c, habit: questName)
         }
-        if roll == 2, c.today.due > 0, c.today.done > 0, c.hour >= 17 {
-            let done = c.today.done, due = c.today.due
+        // Числа те же, что в кольце на экране «Сегодня» (там учтены и привычки «N раз в неделю»).
+        if roll == 2, c.today.scheduled > 0, c.today.scheduledDone > 0, c.hour >= 17 {
+            let done = c.today.scheduledDone, due = c.today.scheduled
             if done == due { return fill(c.strict ? "Все %d из %d целей%N. Чисто." : "Сегодня мы закрыли все цели%N! Я сияю!", c, done, due) }
             return fill(c.strict ? "%d из %d%N. Добьём остальное." : "Ого, сегодня уже %d из %d целей%N!", c, done, due)
         }

@@ -9,9 +9,11 @@ struct SummaryHeader: View {
 
     var body: some View {
         let engine = store.engine
-        let due = build.filter { engine.isScheduled(day, $0.schedule) }
-        let done = due.filter { engine.isDone(store.value(of: $0, on: day), goal: $0.goal) }.count
-        let ratio = due.isEmpty ? 0 : Double(done) / Double(due.count)
+        // Одни и те же числа, что у напарника и в подписи «X из Y»: считает домен, а не экран.
+        let summary = CompanionEngine(calendar: engine.calendar).summary(build.map(\.snapshot), on: day)
+        let dueCount = summary.scheduled
+        let done = summary.scheduledDone
+        let ratio = summary.screenRatio ?? 0
         let accent = Appearance.shared.accent
         let bestQuit = quit.map { engine.quitStreak($0.snapshot) }.max { $0.current < $1.current }
 
@@ -33,7 +35,7 @@ struct SummaryHeader: View {
                 Text(Copy.greeting)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                Text(headline(done: done, due: due.count))
+                Text(headline(done: done, due: dueCount))
                     .font(.headline)
                     .fixedSize(horizontal: false, vertical: true)
                 if let q = bestQuit, q.current > 3_600 {
@@ -105,9 +107,6 @@ struct WeekStrip: View {
     }
 
     private func ratio(_ d: Date) -> Double {
-        let due = habits.filter { store.engine.isScheduled(d, $0.schedule) && $0.startDate <= Calendar.habitFlow.addingDays(1, to: d) }
-        guard !due.isEmpty else { return 0 }
-        let done = due.filter { store.engine.isDone(store.value(of: $0, on: d), goal: $0.goal) }.count
-        return Double(done) / Double(due.count)
+        CompanionEngine(calendar: store.engine.calendar).summary(habits.map(\.snapshot), on: d).screenRatio ?? 0
     }
 }

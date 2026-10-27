@@ -15,7 +15,15 @@ final class AppRouter {
     var showAIComposer = false
     var showChat = false
     var showFriends = false
+    /// Стопка быстрых карточек.
+    var showCards = false
+    var showReview = false
+    var showRelax = false
+    var settingsPage: SettingsPage?
     var toast: String?
+
+    /// Страницы настроек, которые можно открыть ссылкой.
+    enum SettingsPage: String, Hashable { case quickCards, sounds, health, qa }
 
     private init() {}
 
@@ -49,6 +57,16 @@ final class AppRouter {
         case "companion": tab = .companion
         case "chat": chat(about: nil)
         case "progress": tab = .progress
+        case "cards": tab = .today; showCards = true
+        case "review": tab = .progress; showReview = true
+        case "relax": showRelax = true
+        case "settings":
+            if let page = SettingsPage(rawValue: url.path.replacingOccurrences(of: "/", with: "")) {
+                tab = .settings
+                settingsPage = page
+            } else {
+                tab = .settings
+            }
         case "friends", "join":
             let code = q("code").uppercased().filter { $0.isLetter || $0.isNumber }
             if !code.isEmpty { UserDefaults.standard.set(code, forKey: "hf.pendingJoin") }

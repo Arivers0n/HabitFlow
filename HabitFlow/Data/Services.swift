@@ -125,8 +125,14 @@ enum NotificationService {
         UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: ids)
     }
 
+    /// Снимает только напоминания привычек. Быстрые карточки и недельный разбор — отдельные настройки,
+    /// их удаление данных не касается.
     static func cancelAll() {
-        UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
+        let center = UNUserNotificationCenter.current()
+        center.getPendingNotificationRequests { requests in
+            let ids = requests.map(\.identifier).filter { $0.hasPrefix("habit-") }
+            center.removePendingNotificationRequests(withIdentifiers: ids)
+        }
     }
 }
 

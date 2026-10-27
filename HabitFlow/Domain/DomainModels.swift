@@ -53,9 +53,12 @@ struct HabitSnapshot: Sendable {
     /// Моменты, когда устоял перед искушением (только для отказа).
     var resisted: [Date]
     var name: String
+    /// В архиве привычка не показывается на экранах, но её история по-прежнему даёт опыт.
+    var isArchived: Bool
 
     init(kind: HabitKind, startDate: Date, schedule: Schedule = .daily, goal: Goal = .check,
-         checkIns: [CheckInValue] = [], relapses: [RelapseValue] = [], resisted: [Date] = [], name: String = "") {
+         checkIns: [CheckInValue] = [], relapses: [RelapseValue] = [], resisted: [Date] = [], name: String = "",
+         isArchived: Bool = false) {
         self.kind = kind
         self.startDate = startDate
         self.schedule = schedule
@@ -64,6 +67,7 @@ struct HabitSnapshot: Sendable {
         self.relapses = relapses
         self.resisted = resisted
         self.name = name
+        self.isArchived = isArchived
     }
 }
 

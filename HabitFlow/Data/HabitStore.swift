@@ -139,7 +139,11 @@ final class HabitStore {
         ci.habit = h
         // Угощение для напарника — за выполненную сегодня цель, а не за каждое касание.
         if calendar.isDateInToday(day), !engine.isDone(before, goal: h.goal), engine.isDone(before + value, goal: h.goal) {
-            if !isTest { CompanionManager.shared.earnTreat() }
+            if !isTest {
+                CompanionManager.shared.earnTreat()
+                SoundService.shared.play(.done)
+                RelaxOfferCenter.shared.consider(habitName: h.name)
+            }
         }
         save()
         checkMilestone(h)
@@ -178,6 +182,7 @@ final class HabitStore {
         context.insert(r)
         r.habit = h
         save()
+        if !isTest { SoundService.shared.play(.relapse) }
         return before
     }
 
@@ -190,6 +195,7 @@ final class HabitStore {
         r.habit = h
         if reward > 0 { if !isTest { CompanionManager.shared.earnTreat() } }
         save()
+        if !isTest { SoundService.shared.play(.petHappy) }
         return reward
     }
 

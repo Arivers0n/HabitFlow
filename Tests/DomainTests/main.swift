@@ -276,5 +276,245 @@ do {
     check(true, "фразы: все комбинации без пропущенных меток")
 }
 
+// MARK: Здоровье и сон
+
+do {
+    func iv(_ sd: Int, _ sh: Int, _ ed: Int, _ eh: Int) -> SleepInterval {
+        SleepInterval(start: day(2026, 10, sd, sh), end: day(2026, 10, ed, eh))
+    }
+    // Пересекающиеся и соседние промежутки склеиваются
+    let merged = SleepMath.merge([iv(25, 23, 26, 3), iv(26, 2, 26, 6), iv(26, 7, 26, 8)])
+    check(merged.count == 2, "сон: склейка пересечений, получили \(merged.count)")
+    check(abs(merged[0].duration - 7 * 3600) < 1, "сон: 23:00–06:00 = 7 ч")
+
+    // Ночное пробуждение на 30 минут не делит ночь; дневной сон не ночь
+    let items = [iv(25, 23, 26, 3), iv(26, 3, 26, 3), SleepInterval(start: day(2026, 10, 26, 3).addingTimeInterval(1800), end: day(2026, 10, 26, 7)),
+                 iv(26, 14, 26, 15)]
+    let nights = SleepMath.nights(items, calendar: cal)
+    check(nights.count == 1, "сон: одна ночь, дневной сон не считается, получили \(nights.count)")
+    check(SleepMath.lastNight(nights, now: day(2026, 10, 26, 9), calendar: cal) != nil, "сон: последняя ночь найдена")
+    check(SleepMath.lastNight(nights, now: day(2026, 10, 29, 9), calendar: cal) == nil, "сон: старая ночь не последняя")
+
+    let adv = HealthAdvice(calendar: cal)
+    var h = HealthSnapshot(sleepStart: day(2026, 10, 26, 1), sleepEnd: day(2026, 10, 26, 6), sleepSeconds: 5 * 3600, asOf: now)
+    var tips = adv.tips(for: h, now: day(2026, 10, 26, 9))
+    check(tips.contains { $0.kind == .sleepDeficit && $0.suggestedBedtimeMinutes != nil }, "здоровье: дефицит сна → лечь раньше")
+    check(!tips.contains { $0.kind == .goodSleep }, "здоровье: нет похвалы при дефиците")
+    check(tips.allSatisfy { !$0.text.contains("%") && !$0.text.contains("  ") }, "здоровье: тексты без меток и двойных пробелов")
+
+    h = HealthSnapshot(sleepSeconds: 40 * 60)
+    check(adv.tips(for: h, now: day(2026, 10, 26, 9)).isEmpty, "здоровье: обрывок сна не даёт советов")
+
+    h = HealthSnapshot(sleepSeconds: 8 * 3600, workoutMinutes: 50)
+    tips = adv.tips(for: h, now: day(2026, 10, 26, 18))
+    check(adv.waterBoost(tips) == 500, "здоровье: тренировка → +500 мл воды")
+    check(!tips.contains { $0.kind == .goodSleep }, "здоровье: похвала не дублирует другие советы")
+
+    h = HealthSnapshot(sleepSeconds: 8 * 3600)
+    check(adv.tips(for: h, now: day(2026, 10, 26, 9)).first?.kind == .goodSleep, "здоровье: хороший сон → похвала")
+    check(HealthAdvice.hm(7.5 * 3600) == "7 ч 30 мин" && HealthAdvice.clock(1425) == "23:45", "здоровье: форматы времени")
+    check(adv.tips(for: HealthSnapshot(), now: now).isEmpty, "здоровье: пустые данные — тишина")
+
+    let fewSteps = HealthSnapshot(steps: 1200)
+    check(adv.tips(for: fewSteps, now: day(2026, 10, 26, 10)).isEmpty, "здоровье: утром мало шагов — не ругаем")
+    check(adv.tips(for: fewSteps, now: day(2026, 10, 26, 19)).first?.kind == .lowActivity, "здоровье: вечером мало шагов — подсказка")
+}
+
+// MARK: Проверка согласованности (QA)
+
+do {
+    let checker = ConsistencyChecker(calendar: cal)
+    let water = HabitSnapshot(kind: .build, startDate: day(2026, 10, 20), goal: Goal(target: 2000, unit: "мл", step: 250),
+                              checkIns: checks([day(2026, 10, 25, 9), day(2026, 10, 25, 14)], value: 1000), name: "Вода")
+    let quit = HabitSnapshot(kind: .quit, startDate: day(2026, 10, 10), name: "Курение")
+    let clean = checker.check([water, quit], now: now)
+    check(clean.isClean, "QA: чистые данные без замечаний: \(clean.summary) \(clean.issues.map(\.code))")
+
+    // Простая отметка записана дважды за день — нестыковка (след двойного нажатия)
+    var early = HabitSnapshot(kind: .build, startDate: day(2026, 10, 20), name: "Чтение")
+    early.checkIns = checks([day(2026, 10, 24, 9), day(2026, 10, 24, 10)])
+    check(checker.check([early], now: now).issues.contains { $0.code == "C03" }, "QA: двойная простая отметка замечена")
+
+    // Срыв в будущем
+    var future = quit
+    future.relapses = [RelapseValue(date: day(2026, 11, 20), amount: 1, trigger: "")]
+    check(!checker.check([future], now: now).isClean, "QA: срыв в будущем замечен")
+
+    // Экраны показывают не то, что пересчёт
+    let engineXP = CompanionEngine(calendar: cal).xp([water, quit], now: now).total
+    let ok = QADisplayed(xpTotal: engineXP)
+    check(checker.check([water, quit], displayed: ok, now: now).isClean, "QA: верный XP на экране — чисто")
+    let bad = QADisplayed(xpTotal: engineXP + 40)
+    check(checker.check([water, quit], displayed: bad, now: now).errors > 0, "QA: расхождение XP — ошибка")
+
+    let report = checker.check([early], now: now)
+    check(report.json().contains("\"issues\""), "QA: JSON-отчёт собирается")
+}
+
+// MARK: Сводка дня: единые числа
+
+do {
+    let comp = CompanionEngine(calendar: cal)
+    let daily = HabitSnapshot(kind: .build, startDate: day(2026, 10, 1), checkIns: checks([day(2026, 10, 26, 9)]), name: "А")
+    let weekly = HabitSnapshot(kind: .build, startDate: day(2026, 10, 1), schedule: .timesPerWeek(3), name: "Б")
+    let s = comp.summary([daily, weekly], on: now)
+    check(s.scheduled == 2 && s.scheduledDone == 1, "сводка: scheduled \(s.scheduled)/\(s.scheduledDone)")
+    check(s.due == 1 && s.done == 1, "сводка: строгие числа отдельно")
+    var archived = weekly; archived.isArchived = true
+    check(comp.summary([daily, archived], on: now).scheduled >= 1, "сводка: архив не ломает расчёт")
+}
+
+// MARK: Быстрые карточки
+
+do {
+    let planner = QuickCardPlanner(calendar: cal)
+    let water = HabitSnapshot(kind: .build, startDate: day(2026, 10, 1), goal: Goal(target: 2000, unit: "мл", step: 250), name: "Вода")
+    let read = HabitSnapshot(kind: .build, startDate: day(2026, 10, 1), name: "Чтение")
+    let quit = HabitSnapshot(kind: .quit, startDate: day(2026, 10, 10), name: "Курение")
+    let deck = planner.deck([QuickHabit(id: "w", snapshot: water), QuickHabit(id: "r", snapshot: read), QuickHabit(id: "q", snapshot: quit)], now: now)
+    check(deck.count == 4, "карточки: 3 привычки + настроение, получили \(deck.count)")
+    check(deck.first?.kind == .resist && deck.last?.kind == .mood, "карточки: тяга первой, настроение последним")
+    check(deck.allSatisfy { !$0.options.isEmpty }, "карточки: у каждой есть варианты ответа")
+
+    let done = HabitSnapshot(kind: .build, startDate: day(2026, 10, 1), checkIns: checks([day(2026, 10, 26, 9)]), name: "Чтение")
+    let deck2 = planner.deck([QuickHabit(id: "r", snapshot: done)], now: now, moodAnswered: true)
+    check(deck2.isEmpty, "карточки: выполненное не спрашиваем")
+    var arch = read; arch.isArchived = true
+    check(planner.deck([QuickHabit(id: "r", snapshot: arch)], now: now, moodAnswered: true).isEmpty, "карточки: архив не спрашиваем")
+    let many = (0..<9).map { QuickHabit(id: "h\($0)", snapshot: read) }
+    check(planner.deck(many, now: now).count <= 5, "карточки: не больше пяти")
+
+    // Время уведомления
+    let none = planner.suggestedMinutes([read], now: now)
+    check(none.minutes == 20 * 60 && !none.personalized, "время: мало данных → 20:00")
+    var ins: [CheckInValue] = []
+    for d in 15...25 { ins.append(CheckInValue(date: day(2026, 10, d, 21).addingTimeInterval(15 * 60), value: 1)) }
+    let routine = HabitSnapshot(kind: .build, startDate: day(2026, 10, 1), checkIns: ins)
+    let sug = planner.suggestedMinutes([routine], now: now)
+    check(sug.personalized && sug.minutes == 21 * 60 - 15 + 0 || sug.minutes == 20 * 60 + 45, "время: по режиму дня \(sug.minutes)")
+    check(sug.minutes % 5 == 0, "время: кратно 5 минутам")
+    // Отметки задним числом (ровно 12:00) режим не определяют
+    let backdated = HabitSnapshot(kind: .build, startDate: day(2026, 10, 1), checkIns: checks((15...25).map { day(2026, 10, $0, 12) }))
+    check(!planner.suggestedMinutes([backdated], now: now).personalized, "время: задним числом не учитываем")
+    let early = planner.suggestedMinutes([routine], bedtimeMinutes: 22 * 60, now: now)
+    check(early.minutes <= 22 * 60 - 90, "время: не позже чем за 1,5 ч до сна")
+
+    for a in [QuickAnswer.done, .added(250), .filled, .resisted, .relapse, .noUrge, .mood(1), .mood(3), .mood(5), .skipped] {
+        for strict in [true, false] {
+            for seed in 0..<6 {
+                let t = QuickReactions.line(for: a, userName: seed % 2 == 0 ? "Андрей" : "", strict: strict, seed: seed)
+                if t.isEmpty || t.contains("%") || t.contains("  ") || t.contains(" ,") { check(false, "реакция с ошибкой: «\(t)»") }
+            }
+        }
+    }
+    check(true, "реакции: чистые тексты")
+    check(QuickReactions.finished(userName: "", strict: false, gainedXP: 25, seed: 0).contains("+25 XP"), "реакции: итог с XP")
+}
+
+// MARK: Разбор недели
+
+do {
+    let b = WeeklyReviewBuilder(calendar: cal)
+    let good = HabitSnapshot(kind: .build, startDate: day(2026, 9, 1), checkIns: checks((20...26).map { day(2026, 10, $0, 9) }), name: "Зарядка")
+    let bad = HabitSnapshot(kind: .build, startDate: day(2026, 9, 1), checkIns: checks([day(2026, 10, 20, 9)]), name: "Чтение")
+    let quit = HabitSnapshot(kind: .quit, startDate: day(2026, 9, 1),
+                             relapses: [RelapseValue(date: day(2026, 10, 24, 22), amount: 2, trigger: "Стресс")], name: "Курение")
+    let r = b.build([good, bad, quit], now: now)
+    check(r.habits.count == 3, "разбор: все привычки в разборе, получили \(r.habits.count)")
+    check(r.strengths.contains { $0.contains("Зарядка") }, "разбор: сильная сторона найдена")
+    check(r.dips.contains { $0.contains("Чтение") } && r.dips.contains { $0.contains("Стресс") }, "разбор: просадки и триггер")
+    check(!r.microSteps.isEmpty && r.microSteps.count <= 3, "разбор: есть микро-шаги")
+    let text = r.text()
+    check(!text.isEmpty && !text.contains("%d") && !text.contains("  "), "разбор: офлайн-текст чистый")
+    check(WeeklyReviewBuilder(calendar: cal).build([], now: now).text().contains("Пока нечего"), "разбор: пустые данные")
+    var arch = good; arch.isArchived = true
+    check(b.build([arch], now: now).isEmpty, "разбор: архив не входит")
+}
+
+// MARK: Промпт и ответы ИИ
+
+do {
+    let p = PersonaInput(name: "Искорка", species: "Дракончик", trait: "Смелая.", userName: "", strict: false)
+    let phone = PersonaPrompt.build(p)
+    check(!phone.contains("  ") && !phone.contains("%"), "промпт: нет двойных пробелов")
+    check(!phone.contains("Пользователя зовут"), "промпт: без имени нет лишней фразы")
+    var w = p; w.channel = .watch; w.userName = "Андрей"
+    let watch = PersonaPrompt.build(w)
+    check(watch.contains("120 символов") && watch.contains("Андрей"), "промпт: часы — коротко и по имени")
+    var br = p; br.brainstorm = true
+    check(PersonaPrompt.build(br).contains("Что скажешь?"), "промпт: мозговой штурм")
+
+    check(ReplyPolish.clean("**Привет!**\n\n## Итог\n- пункт\n\n\n\nконец") == "Привет!\n\nИтог\n• пункт\n\nконец", "ответ: разметка убрана")
+    let long = "Сегодня ты выполнил почти всё. Осталась вода. Давай закончим день красиво и спокойно, не торопясь, одним стаканом."
+    let fit = ReplyPolish.watchFit(long)
+    check(fit.count <= 120 && fit.hasSuffix("."), "часы: целые предложения ≤120, получили \(fit.count)")
+    let oneLong = String(repeating: "слово ", count: 40)
+    let cut = ReplyPolish.watchFit(oneLong)
+    check(cut.count <= 120 && cut.hasSuffix("…"), "часы: длинное предложение режется по слову")
+    check(ReplyPolish.watchFit("Коротко!") == "Коротко!", "часы: короткое не трогаем")
+    check(ReplyPolish.ensureBrainstormEnding("Есть идея") == "Есть идея. Что скажешь?", "штурм: добавлен вопрос")
+    check(ReplyPolish.ensureBrainstormEnding("Идея. Что скажешь?") == "Идея. Что скажешь?", "штурм: без дублей")
+    check(ReplyPolish.ensureBrainstormEnding("Как тебе?") == "Как тебе? Что скажешь?", "штурм: после вопроса")
+}
+
+// MARK: Звуки
+
+do {
+    for e in SoundEvent.allCases {
+        let buf = ToneSynth.render(ToneSynth.notes(for: e))
+        check(!buf.isEmpty && buf.allSatisfy { abs($0) <= 1 }, "звук \(e.rawValue): буфер в пределах [-1, 1]")
+        check(buf.first == 0 && buf.last == 0, "звук \(e.rawValue): начало и конец тихие (нет щелчка)")
+    }
+    let wav = WAVEncoder.encode([0, 0.5, -0.5], sampleRate: 44_100)
+    check(wav.count == 44 + 6 && String(data: wav.prefix(4), encoding: .ascii) == "RIFF", "wav: заголовок и размер")
+
+    var s = SoundSettings()
+    check(SoundRules.allows(.tap, s, now: now, calendar: cal), "звук: по умолчанию включён")
+    s.master = false
+    check(!SoundRules.allows(.tap, s, now: now, calendar: cal), "звук: общий выключатель")
+    s = SoundSettings(); s.pet = false
+    check(!SoundRules.allows(.petTap, s, now: now, calendar: cal) && SoundRules.allows(.tap, s, now: now, calendar: cal), "звук: категории")
+    s = SoundSettings(); s.quietMode = true
+    check(SoundRules.isQuiet(s, now: day(2026, 10, 26, 23), calendar: cal), "тишина: 23:00 в тихих часах")
+    check(SoundRules.isQuiet(s, now: day(2026, 10, 26, 7), calendar: cal), "тишина: 07:00 после полуночи")
+    check(!SoundRules.isQuiet(s, now: day(2026, 10, 26, 12), calendar: cal), "тишина: полдень вне тихих часов")
+    check(SoundRules.gain(0) == 0 && SoundRules.gain(1) <= 0.8 && SoundRules.gain(5) <= 0.8, "громкость: в пределах")
+
+    for scene in AmbientScene.allCases {
+        var g = AmbientGenerator(scene: scene)
+        var buf = [Float](repeating: 0, count: 44_100)
+        g.fill(&buf)
+        let peak = buf.map { abs($0) }.max() ?? 0
+        check(peak <= 0.9 && peak > 0.001 && buf.allSatisfy { $0.isFinite }, "фон \(scene.rawValue): конечный сигнал в пределах, пик \(peak)")
+    }
+    var f = FadeEnvelope()
+    f.fadeIn(seconds: 1)
+    var last: Float = 0
+    for _ in 0..<44_100 { last = f.step(sampleRate: 44_100) }
+    check(abs(last - 1) < 0.001, "fade: достиг 1")
+    f.fadeOut(seconds: 0.5)
+    for _ in 0..<22_100 { _ = f.step(sampleRate: 44_100) }
+    check(f.isSilent, "fade: затух")
+
+    check(HabitTheme.classify("Лечь спать до 23:00") == .sleep && HabitTheme.classify("Сон 8 часов") == .sleep, "тема: сон")
+    check(HabitTheme.classify("Медитация") == .focus && HabitTheme.classify("Чтение") == .focus, "тема: концентрация")
+    check(HabitTheme.classify("Персонал") == .other && HabitTheme.classify("Вода") == .other, "тема: персонал — не сон")
+    check(RelaxPlanner.offer(afterCompleting: "Медитация", strict: false) != nil && RelaxPlanner.offer(afterCompleting: "Вода", strict: false) == nil, "релакс: только для фокуса и сна")
+}
+
+// MARK: Идеи
+
+do {
+    let first = IdeaBank.next(shown: [])
+    check(first != nil, "идеи: есть первая")
+    var shown: [String] = []
+    for _ in 0..<(IdeaBank.all.count + 2) {
+        if let i = IdeaBank.next(shown: shown) { shown.append(i.id) }
+    }
+    check(Set(shown.prefix(IdeaBank.all.count)).count == IdeaBank.all.count, "идеи: сначала все разные")
+    check(IdeaBank.all.allSatisfy { IdeaBank.message($0, strict: false).hasSuffix("Что скажешь?") }, "идеи: каждое сообщение заканчивается вопросом")
+    check(IdeaBank.next(shown: [], hasDeviceFeatures: false)?.needsDevice == false, "идеи: без устройства не предлагаем виджеты")
+}
+
 print(failures == 0 ? "✓ Все \(passed) проверок прошли" : "Провалено: \(failures), прошло: \(passed)")
 exit(failures == 0 ? 0 : 1)

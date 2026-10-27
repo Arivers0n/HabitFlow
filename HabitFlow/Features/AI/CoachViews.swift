@@ -77,9 +77,13 @@ struct CompanionChatView: View {
                 ToolbarItem(placement: .cancellationAction) { Button("Готово") { dismiss() } }
                 ToolbarItem(placement: .primaryAction) {
                     Menu {
+                        Button { addIdea() } label: { Label("Идея от напарника", systemImage: "lightbulb") }
+                        Button { Task { await addWatchSample() } } label: {
+                            Label("Ответ как на часах", systemImage: "applewatch")
+                        }
                         Button(role: .destructive) { chat.clear() } label: { Label("Очистить переписку", systemImage: "trash") }
+                            .disabled(chat.messages.isEmpty)
                     } label: { Image(systemName: "ellipsis.circle") }
-                    .disabled(chat.messages.isEmpty)
                 }
             }
             .task {
@@ -143,6 +147,20 @@ struct CompanionChatView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
+    }
+
+    /// Идея для мозгового штурма: берётся из банка идей, поэтому работает и без ИИ.
+    private func addIdea() {
+        guard let next = AICoach.nextIdea() else { return }
+        chat.messages.append(AI.Message(role: "assistant", text: next.message))
+        Haptics.soft()
+    }
+
+    /// Так напарник ответит на часах: одно-два коротких предложения.
+    private func addWatchSample() async {
+        let reply = await AICoach.watchReply(to: "Как у меня дела?", habits: habits)
+        chat.messages.append(AI.Message(role: "assistant", text: "⌚ " + reply))
+        Haptics.soft()
     }
 
     private func send(_ t: String) {
@@ -426,7 +444,7 @@ struct WeeklyReviewCard: View {
             if busy {
                 HStack(spacing: 10) {
                     ProgressView()
-                    Text("Напарник смотрит на твою неделю…").font(.subheadline).foregroundStyle(.secondary)
+                    Text("Напарник смотрит на неделю…").font(.subheadline).foregroundStyle(.secondary)
                 }
                 .transition(.opacity)
             } else if let text {
@@ -439,8 +457,8 @@ struct WeeklyReviewCard: View {
                         .font(.footnote.weight(.semibold))
                 }
             } else {
-                Text(AI.available ? "ИИ посмотрит на серии и срывы за неделю и подскажет, на чём сосредоточиться."
-                                  : "Войдите в аккаунт, чтобы получать разбор недели от ИИ.")
+                Text(AI.available ? "Напарник посмотрит на серии и срывы за неделю и подскажет, на чём сосредоточиться."
+                                  : "Разбор по вашей истории: сильные стороны, просадки и микро-шаги. С входом в аккаунт он станет живее.")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
                 Button(action: load) {
@@ -450,7 +468,6 @@ struct WeeklyReviewCard: View {
                         .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(accent.opacity(0.15)))
                 }
                 .buttonStyle(PressableStyle())
-                .disabled(!AI.available)
             }
             if let error {
                 Text(error).font(.footnote).foregroundStyle(Palette.danger)

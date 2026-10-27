@@ -15,6 +15,7 @@ struct SettingsView: View {
 
     var body: some View {
         @Bindable var ap = Appearance.shared
+        @Bindable var router = AppRouter.shared
         NavigationStack {
             Form {
                 Section {
@@ -72,6 +73,21 @@ struct SettingsView: View {
                     Text(ap.s.tone == .gentle
                          ? "Мягкий: «Рекорд сохранён: 23 дня. Новая серия уже началась»."
                          : "Строгий: «Серия обнулена. Рекорд — 23 дня»." )
+                }
+
+                Section("Напарник") {
+                    NavigationLink { QuickCardsSettingsView() } label: {
+                        settingsRow("Быстрые карточки", "rectangle.stack.badge.plus", Color(hex: "FF7A2E"))
+                    }
+                    NavigationLink { SoundSettingsView() } label: {
+                        settingsRow("Звуки и релакс", "speaker.wave.2.fill", Color(hex: "5AC8FA"))
+                    }
+                    NavigationLink { HealthSettingsView() } label: {
+                        settingsRow("Здоровье", "heart.fill", Color(hex: "FF5FA2"))
+                    }
+                    NavigationLink { QAView() } label: {
+                        settingsRow("Проверка данных", "checkmark.shield.fill", Color(hex: "34C759"))
+                    }
                 }
 
                 Section("Привычки") {
@@ -136,6 +152,14 @@ struct SettingsView: View {
             .scrollContentBackground(.hidden)
             .background(AppBackground())
             .navigationTitle("Настройки")
+            .navigationDestination(item: $router.settingsPage) { page in
+                switch page {
+                case .quickCards: QuickCardsSettingsView()
+                case .sounds: SoundSettingsView()
+                case .health: HealthSettingsView()
+                case .qa: QAView()
+                }
+            }
             .fileImporter(isPresented: $importing, allowedContentTypes: [.json]) { result in
                 switch result {
                 case .success(let url):

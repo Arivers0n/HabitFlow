@@ -22,4 +22,11 @@ launch -hfShot stress -hfOpen ai;               shot 09-ai 6
 launch -hfShot stress -hfOpen friends;          shot 10-friends 6
 launch -hfShot stress -hfOpen debug/chat;       shot 11-chat 6
 launch -hfShot stress -hfShotCharacter robot -hfOpen debug/levelup; shot 12-levelup 4
+launch -hfShot stress -hfOpen cards;            shot 13-cards 6
+launch -hfShot stress -hfOpen settings/quickCards; shot 14-settings-cards 6
+launch -hfShot stress -hfOpen settings/sounds;  shot 15-settings-sounds 6
+launch -hfShot stress -hfOpen settings/health;  shot 16-settings-health 6
+launch -hfShot stress -hfOpen settings/qa;      shot 17-settings-qa 6
+launch -hfShot stress -hfOpen review;           shot 18-review 6
+launch -hfShot stress -hfOpen relax;            shot 19-relax 6
 ls -1 "$OUT"

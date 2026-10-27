@@ -253,6 +253,7 @@ final class CompanionManager {
                                hatched: oldStage == .egg && newStage != .egg,
                                stageChanged: newStage != oldStage ? newStage : nil)
         Haptics.celebrate()
+        SoundService.shared.play(oldStage == .egg && newStage != .egg ? .hatch : .levelUp)
     }
 
     func showResist(_ h: Habit, xp: Int) {

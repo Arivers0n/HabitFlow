@@ -77,6 +77,7 @@ struct TodayView: View {
                 .animation(Motion.bouncy, value: undoVisible)
             }
             .onAppear { store.checkAllMilestones(habits) }
+            .task { await HealthService.shared.refresh() }
         }
     }
 
@@ -86,6 +87,7 @@ struct TodayView: View {
         if CompanionManager.shared.hasCompanion && CompanionManager.shared.state.showOnToday {
             CompanionCard()
         }
+        HealthTipCard()
         if ap.s.showSummary {
             SummaryHeader(build: build, quit: quit, day: selectedDay)
         }
@@ -170,9 +172,8 @@ struct TodayView: View {
     }
 
     private var buildTrailing: String {
-        let due = build.filter { store.engine.isScheduled(selectedDay, $0.schedule) }
-        let done = due.filter { store.engine.isDone(store.value(of: $0, on: selectedDay), goal: $0.goal) }
-        return due.isEmpty ? "" : "\(done.count) из \(due.count)"
+        let s = CompanionEngine(calendar: store.engine.calendar).summary(build.map(\.snapshot), on: selectedDay)
+        return s.scheduled == 0 ? "" : "\(s.scheduledDone) из \(s.scheduled)"
     }
 
     private var emptyState: some View {
@@ -203,6 +204,12 @@ struct TodayView: View {
             }
         }
         ToolbarItemGroup(placement: .topBarTrailing) {
+            Button { router.showCards = true; Haptics.tap() } label: {
+                Image(systemName: "rectangle.stack.fill")
+                    .font(.headline)
+                    .frame(width: 36, height: 36)
+            }
+            .accessibilityLabel("Быстрые карточки")
             Button { router.showAIComposer = true; Haptics.tap() } label: {
                 Image(systemName: "sparkles")
                     .font(.headline)
