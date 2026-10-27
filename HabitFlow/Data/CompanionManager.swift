@@ -126,6 +126,8 @@ final class CompanionManager {
     var phraseSeed = Int.random(in: 0..<10_000)
     var levelUp: LevelUpEvent?
     var resist: ResistEvent?
+    /// Последнее событие приложения: питомец отвечает на него мимикой и подпрыгиванием.
+    private(set) var reaction: (event: PetAppEvent, at: Date)?
 
     private let engine = CompanionEngine()
 
@@ -227,6 +229,12 @@ final class CompanionManager {
 
     func nextPhrase() { phraseSeed &+= 1 }
 
+    /// Питомец реагирует на событие (выполнил привычку, срыв, новый уровень…).
+    func react(_ event: PetAppEvent) {
+        guard hasCompanion, !testing else { return }
+        reaction = (event, .now)
+    }
+
     // MARK: - События
 
     /// Вызывается при каждом открытии приложения: запоминает, сколько не заходили.
@@ -255,6 +263,7 @@ final class CompanionManager {
                                hatched: oldStage == .egg && newStage != .egg,
                                stageChanged: newStage != oldStage ? newStage : nil)
         Haptics.celebrate()
+        react(.levelUp)
         SoundService.shared.play(oldStage == .egg && newStage != .egg ? .hatch : .levelUp)
     }
 

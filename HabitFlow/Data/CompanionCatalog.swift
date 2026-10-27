@@ -30,6 +30,8 @@ struct CompanionCharacter: Identifiable, Hashable, Sendable {
     let headX: Double
     /// Свой персонаж из этого приложения (нарисован кодом), а не с картинок.
     let original: Bool
+    /// Настоящая 3D-модель (SceneKit, собрана кодом): объём, свет, мимика, взгляд за пальцем.
+    var model3D = false
     /// Ширина картинки к высоте.
     var aspect: Double { CompanionCatalog.aspects[id] ?? 0.9 }
 
@@ -80,9 +82,18 @@ enum CompanionCatalog {
         .init(id: "sprout", name: "Тим", species: "Росток",
               trait: "Растёт вместе с тобой — по листочку за каждый день.",
               tintHex: "3DDC97", power: .nature, headX: 0.5, original: true),
+        .init(id: "jelly", name: "Желейка", species: "Желе-слаймик",
+              trait: "Мягкая и пружинистая. Дрожит от радости и следит за твоим пальцем.",
+              tintHex: "4FD6C0", power: .bubble, headX: 0.5, original: true, model3D: true),
+        .init(id: "kitty", name: "Мурка", species: "Котёнок",
+              trait: "Ласковая и любопытная. Виляет хвостом, когда у тебя всё получается.",
+              tintHex: "FFA45B", power: .party, headX: 0.5, original: true, model3D: true),
+        .init(id: "owl", name: "Хуху", species: "Совёнок",
+              trait: "Мудрый и сонный. Машет крылышками, когда ты молодец, и ночью не даёт сорваться.",
+              tintHex: "9A8CFF", power: .light, headX: 0.5, original: true, model3D: true),
     ]
 
-    static let aspects: [String: Double] = ["dragon": 0.951, "sloth": 0.782, "capybara": 0.749, "penguin": 0.846, "axolotl": 1.003, "robot": 0.852, "mushroom": 0.98, "sheep": 0.956, "redpanda": 0.886, "ghost": 0.974, "muse": 1.061, "drop": 0.82, "flame": 0.818, "sprout": 0.773]
+    static let aspects: [String: Double] = ["dragon": 0.951, "sloth": 0.782, "capybara": 0.749, "penguin": 0.846, "axolotl": 1.003, "robot": 0.852, "mushroom": 0.98, "sheep": 0.956, "redpanda": 0.886, "ghost": 0.974, "muse": 1.061, "drop": 0.82, "flame": 0.818, "sprout": 0.773, "jelly": 0.95, "kitty": 0.95, "owl": 0.9]
 
     static func character(_ id: String?) -> CompanionCharacter? {
         all.first { $0.id == id }

@@ -16,7 +16,7 @@ final class WidgetStore {
     private static let customizedKey = "widgets.customized"
     private static let petKey = "widgets.petID"
     /// Растёт, когда меняются сами картинки питомцев (иначе виджет показывал бы старую копию).
-    private static let petArtVersion = 2
+    private static let petArtVersion = 3
 
     private(set) var configs: WidgetConfigSet
     private(set) var lastRefresh: Date?
@@ -124,7 +124,7 @@ final class WidgetStore {
         // Версия картинок в ключе: после чистки краёв PNG старая копия в общем канале обновится сама.
         let stamp = "\(character.id)@\(Self.petArtVersion)"
         if ud.string(forKey: Self.petKey) == stamp, WidgetShared.readPet() != nil { return true }
-        guard let image = UIImage(named: character.imageName) else {
+        guard let image = Pet3DSnapshot.image(for: character) ?? UIImage(named: character.imageName) else {
             WidgetShared.removePet()
             return false
         }

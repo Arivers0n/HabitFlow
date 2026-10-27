@@ -49,6 +49,11 @@ final class PetSim {
     var treatEmoji = "🍓"
     var crumbs: [Crumb] = []
 
+    // Взгляд и поглаживание (для 3D-питомцев)
+    var lookPoint = CGPoint(x: 0.5, y: 0.4)
+    var lookTime = Date.distantPast
+    var pettingUntil = Date.distantPast
+
     // Сон
     var lastInteraction = Date()
     var asleep = false
@@ -63,6 +68,21 @@ final class PetSim {
         touch = p
         touchTime = .now
         touchAmp = strength
+        look(at: p)
+    }
+
+    /// Куда смотреть: точка в долях от размера слоя персонажа.
+    func look(at p: CGPoint) {
+        lookPoint = p
+        lookTime = .now
+    }
+
+    /// Взгляд на палец −1…1, пока касание свежее; иначе nil.
+    func gazeAtFinger(_ now: Date) -> (x: Double, y: Double)? {
+        guard fingerActive || now.timeIntervalSince(lookTime) < 1.4 else { return nil }
+        let x = max(-1, min(1, Double(lookPoint.x - 0.5) * 2.6))
+        let y = max(-1, min(1, Double(lookPoint.y - 0.38) * 2.2))
+        return (x, y)
     }
 
     func tap(at p: CGPoint, allowSpin: Bool) {
@@ -106,6 +126,8 @@ final class PetSim {
         hold = charRect.insetBy(dx: -10, dy: -10).contains(p) ? .pending : .none
         downAt = .now
         downPoint = p
+        look(at: CGPoint(x: (p.x - charRect.minX) / max(1, charRect.width),
+                         y: (p.y - charRect.minY) / max(1, charRect.height)))
         lastFinger = p
         lastFingerTime = .now
         moved = 0
@@ -119,6 +141,8 @@ final class PetSim {
         let dt = max(0.001, now.timeIntervalSince(lastFingerTime))
         moved += hypot(dx, dy)
         lastInteraction = now
+        look(at: CGPoint(x: (p.x - charRect.minX) / max(1, charRect.width),
+                         y: (p.y - charRect.minY) / max(1, charRect.height)))
 
         switch hold {
         case .holding:
@@ -133,6 +157,7 @@ final class PetSim {
             if charRect.insetBy(dx: -12, dy: -12).contains(p), moved > 6 {
                 hold = .none
                 petDistance += hypot(dx, dy)
+                pettingUntil = now.addingTimeInterval(0.4)
                 poke(at: CGPoint(x: (p.x - charRect.minX) / max(1, charRect.width),
                                  y: (p.y - charRect.minY) / max(1, charRect.height)), strength: 0.35)
                 if petDistance > 55 {

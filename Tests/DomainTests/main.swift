@@ -623,5 +623,68 @@ do {
     check(WidgetSnapshot.sample(now: now, calendar: cal).week.count == 7, "снимок: пример для предпросмотра")
 }
 
+// MARK: Мозг питомца
+do {
+    var s = PetSituation()
+    check(PetBrain.expression(s).expression == .calm, "мозг: спокойный по умолчанию")
+    s.mood = .sad
+    check(PetBrain.expression(s).expression == .sad, "мозг: грусть по настроению")
+    s.asleep = true
+    check(PetBrain.expression(s).expression == .sleepy, "мозг: сон важнее настроения")
+    s.asleep = false; s.held = true; s.tickling = true
+    check(PetBrain.expression(s).expression == .surprised, "мозг: в руке — удивление")
+    s.held = false
+    check(PetBrain.expression(s).expression == .ticklish, "мозг: щекотка")
+    s.tickling = false; s.reaction = .habitDone; s.sinceReaction = 0.2
+    check(PetBrain.expression(s).expression == .joy, "мозг: радость от выполнения")
+    s.sinceReaction = PetAppEvent.habitDone.duration + 0.1
+    check(PetBrain.expression(s).expression == .sad, "мозг: реакция заканчивается")
+    s.reaction = .relapse; s.sinceReaction = 0.5
+    check(PetBrain.expression(s).expression == .worried, "мозг: после срыва — поддержка")
+    check(PetBrain.fade(0, 2) == 1 && PetBrain.fade(2, 2) == 0 && PetBrain.fade(1.7, 2) > 0 && PetBrain.fade(1.7, 2) < 1, "мозг: затухание реакции")
+
+    check(PetBrain.target(.calm, intensity: 1) == PetFace(), "мозг: спокойное лицо — базовое")
+    check(PetBrain.target(.joy, intensity: 1).joyEyes == 1, "мозг: радость — глаза-дуги")
+    check(PetBrain.target(.love, intensity: 1).heartEyes == 1, "мозг: любовь — сердечки")
+    check(PetBrain.target(.joy, intensity: 0) == PetFace(), "мозг: нулевая сила — без выражения")
+    check(PetBrain.target(.sad, intensity: 1).smile < 0, "мозг: грусть — уголки вниз")
+
+    var blinkMax = 0.0, blinkOpen = 0
+    for i in 0..<4000 {
+        let b = PetBrain.blink(t: Double(i) * 0.01, seed: 5)
+        check(b >= 0 && b <= 1, "мозг: моргание в границах")
+        blinkMax = max(blinkMax, b); if b == 0 { blinkOpen += 1 }
+    }
+    check(blinkMax > 0.9, "мозг: моргание доходит до закрытых глаз")
+    check(blinkOpen > 3000, "мозг: большую часть времени глаза открыты")
+    check(PetBrain.blink(t: 12.34, seed: 2) == PetBrain.blink(t: 12.34, seed: 2), "мозг: моргание детерминировано")
+
+    var gazeOK = true
+    for i in 0..<500 {
+        let g = PetBrain.idleGaze(t: Double(i) * 0.37, seed: 3)
+        if abs(g.x) > 1 || abs(g.y) > 1 { gazeOK = false }
+    }
+    check(gazeOK, "мозг: взгляд в границах")
+    let fg = PetBrain.gaze(finger: (0.4, -0.2), tilt: (1, 1), t: 3, seed: 1)
+    check(fg.x == 0.4 && fg.y == -0.2, "мозг: палец важнее наклона")
+
+    var sit = PetSituation(); sit.mood = .happy
+    let closed = PetBrain.face(sit, blink: 1, gaze: (5, -5))
+    check(closed.eyeOpen == 0, "мозг: полное моргание закрывает глаза")
+    check(closed.gazeX == 1 && closed.gazeY == -1, "мозг: взгляд ограничивается")
+    var joy = PetSituation(); joy.reaction = .allDone; joy.sinceReaction = 0
+    check(PetBrain.face(joy, blink: 1, gaze: (0, 0)).joyEyes > 0.3, "мозг: дуги не мигают как глаза")
+    var eat = PetSituation(); eat.feedPhase = 0.3
+    check(PetBrain.face(eat, blink: 0, gaze: (0, 0)).mouthOpen > 0.25, "мозг: при еде рот открывается")
+    for i in 0...100 {
+        let m = PetBrain.eatingMouth(Double(i) / 100)
+        check(m >= 0 && m <= 1, "мозг: рот при еде в границах")
+    }
+    let h = PetBrain.hash01(7, 9)
+    check(h >= 0 && h < 1 && h == PetBrain.hash01(7, 9) && h != PetBrain.hash01(7, 10), "мозг: хэш устойчив и различает входы")
+    let mid = PetFace().mixed(to: PetFace(smile: 1), 0.5)
+    check(abs(mid.smile - (0.35 + 1) / 2) < 1e-9, "мозг: смешивание лиц")
+}
+
 print(failures == 0 ? "✓ Все \(passed) проверок прошли" : "Провалено: \(failures), прошло: \(passed)")
 exit(failures == 0 ? 0 : 1)

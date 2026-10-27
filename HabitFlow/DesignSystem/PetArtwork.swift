@@ -12,7 +12,7 @@ struct PetArtwork: View {
     var rim = true
 
     var body: some View {
-        let image = Image(character.imageName)
+        let image = artwork
             .resizable()
             .interpolation(.high)
             .antialiased(true)
@@ -22,5 +22,13 @@ struct PetArtwork: View {
         } else {
             image
         }
+    }
+
+    /// Для 3D-питомцев — снимок модели, для остальных — картинка из каталога.
+    private var artwork: Image {
+        if character.model3D, let snap = Pet3DSnapshot.image(for: character) {
+            return Image(uiImage: snap)
+        }
+        return Image(character.imageName)
     }
 }

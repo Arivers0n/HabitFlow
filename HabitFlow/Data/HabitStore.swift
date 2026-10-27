@@ -148,12 +148,20 @@ final class HabitStore {
         if calendar.isDateInToday(day), !engine.isDone(before, goal: h.goal), engine.isDone(before + value, goal: h.goal) {
             if !isTest {
                 CompanionManager.shared.earnTreat()
+                CompanionManager.shared.react(allGoalsDone() ? .allDone : .habitDone)
                 SoundService.shared.play(.done)
                 RelaxOfferCenter.shared.consider(habitName: h.name)
             }
         }
         save()
         checkMilestone(h)
+    }
+
+    /// Закрыты ли все цели сегодняшнего дня (те же числа, что в кольце «Сегодня»).
+    private func allGoalsDone() -> Bool {
+        let habits = (try? context.fetch(FetchDescriptor<Habit>())) ?? []
+        let day = CompanionEngine().summary(habits.filter { !$0.isArchived }.map(\.snapshot), on: .now)
+        return day.scheduled > 0 && day.scheduledDone >= day.scheduled
     }
 
     /// Переключить день: выполнено ↔ пусто. Для объёмных целей «выполнено» = вся норма.
@@ -189,7 +197,10 @@ final class HabitStore {
         context.insert(r)
         r.habit = h
         save()
-        if !isTest { SoundService.shared.play(.relapse) }
+        if !isTest {
+            SoundService.shared.play(.relapse)
+            CompanionManager.shared.react(.relapse)
+        }
         return before
     }
 
@@ -202,7 +213,10 @@ final class HabitStore {
         r.habit = h
         if reward > 0 { if !isTest { CompanionManager.shared.earnTreat() } }
         save()
-        if !isTest { SoundService.shared.play(.petHappy) }
+        if !isTest {
+            SoundService.shared.play(.petHappy)
+            CompanionManager.shared.react(.resist)
+        }
         return reward
     }
 

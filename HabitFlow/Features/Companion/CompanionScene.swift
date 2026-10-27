@@ -196,6 +196,15 @@ struct CompanionScene: View {
                       progress: config.eggProgress, interactive: mode != .display, fill: fill)
                 .frame(width: side, height: side)
                 .position(x: g.W / 2, y: g.feetY - side * (0.5 - bottom))
+        } else if config.character.model3D {
+            // Настоящая 3D-модель: масштаб, крен и оборот делает сам SceneKit, SwiftUI только ставит её на островок.
+            let fill: CGFloat = 0.8
+            let side = g.charH / fill
+            let bottom = EggArt.bottomFraction(fill: fill)
+            Pet3DView(characterID: config.character.id, tintHex: config.character.tintHex,
+                      pose: pose3D(t: t, now: now, m: m, tilt: tilt, asleep: asleep), fill: fill)
+                .frame(width: side, height: side)
+                .position(x: g.W / 2, y: g.feetY - side * (0.5 - bottom) + m.dy)
         } else {
             PetBody(config: config, g: g, sim: sim, t: t, now: now, tilt: tilt, tint: tint,
                     squashExtra: m.squash, asleep: asleep)
@@ -238,6 +247,8 @@ struct CompanionScene: View {
         var spin: Double = 0
         var lift: CGFloat = 0
         var squash: CGFloat = 0
+        /// Разворот корпуса в градусах (3D-питомцы оглядываются по-настоящему).
+        var yaw: Double = 0
     }
 
     private func motion(t: Double, now: Date, g: SceneGeometry) -> Motion3 {
@@ -275,8 +286,12 @@ struct CompanionScene: View {
                     // подпрыжка
                     if p < 0.5 { m.dy -= CGFloat(sin(.pi * p * 2)) * g.charH * 0.08 }
                 case 1:
-                    // оглядывается: разворот и обратно
-                    m.sx *= CGFloat(cos(.pi * 2 * p))
+                    // оглядывается: разворот и обратно (у 3D-питомцев — настоящий поворот)
+                    if config.character.model3D {
+                        m.yaw = 70 * sin(.pi * 2 * p)
+                    } else {
+                        m.sx *= CGFloat(cos(.pi * 2 * p))
+                    }
                 case 2:
                     // пританцовывает
                     m.tilt += 8 * sin(p * .pi * 4) * (1 - p)
@@ -334,7 +349,65 @@ struct CompanionScene: View {
                 m.squash += CGFloat(0.14 * sin(.pi * (f - c) / 0.1))
             }
         }
+
+        // Ответ на событие приложения: радуется прыжками, после срыва сникает
+        if let r = CompanionManager.shared.reaction, !sleeping, !held {
+            let since = now.timeIntervalSince(r.at)
+            switch r.event {
+            case .habitDone, .resist:
+                if since >= 0 && since < 0.7 {
+                    m.dy -= CGFloat(sin(.pi * since / 0.7)) * g.charH * 0.16
+                    m.lift = max(m.lift, CGFloat(sin(.pi * since / 0.7)))
+                }
+            case .allDone, .levelUp:
+                if since >= 0 && since < 1.6 {
+                    let q = since / 0.8 - (since / 0.8).rounded(.down)
+                    m.dy -= CGFloat(sin(.pi * q)) * g.charH * 0.2
+                    m.lift = max(m.lift, CGFloat(sin(.pi * q)))
+                }
+            case .relapse:
+                if since >= 0 && since < 2 { m.squash += CGFloat(0.03 * PetBrain.fade(since, 2)) }
+            }
+        }
         return m
+    }
+
+    // MARK: - 3D-питомец
+
+    /// Поза для SceneKit: физика PetSim + движение сцены + лицо от «мозга» питомца.
+    private func pose3D(t: Double, now: Date, m: Motion3, tilt: CGPoint, asleep: Bool) -> Pet3DPose {
+        var pose = Pet3DPose()
+        pose.time = t
+        let q = max(-0.3, min(0.35, Double(sim.squash + m.squash)))
+        pose.sy = Double(m.sy) * (1 - q)
+        pose.sx = Double(m.sx) * (1 + q * 0.6)
+        pose.roll = m.tilt
+        pose.spin = m.spin + m.yaw
+        pose.turn = Double(tilt.x)
+        let age = now.timeIntervalSince(sim.touchTime)
+        if age >= 0 && age < 1.2 {
+            pose.wobble = Double(sim.touchAmp) * exp(-5 * age) * cos(22 * age)
+            pose.wobbleSide = Double(sim.touch.x) - 0.5
+        }
+        pose.sleepiness = asleep ? 1 : 0
+
+        var s = PetSituation()
+        s.mood = config.mood
+        s.asleep = asleep
+        s.held = sim.hold == .holding || sim.airborne
+        s.tickling = now < sim.tickleUntil
+        s.feedPhase = sim.feedPhase(now)
+        s.petting = now < sim.pettingUntil
+        s.sinceJump = now.timeIntervalSince(sim.jumpStart)
+        s.sinceWake = now.timeIntervalSince(sim.wakeAt)
+        if let r = CompanionManager.shared.reaction {
+            s.reaction = r.event
+            s.sinceReaction = now.timeIntervalSince(r.at)
+        }
+        let seed = EggArt.stableHash(config.character.id) & 0xFFFF
+        let gaze = PetBrain.gaze(finger: sim.gazeAtFinger(now), tilt: (Double(tilt.x), Double(tilt.y)), t: t, seed: seed)
+        pose.face = PetBrain.face(s, blink: PetBrain.blink(t: t, seed: seed), gaze: gaze)
+        return pose
     }
 }
 

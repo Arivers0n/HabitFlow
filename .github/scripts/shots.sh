@@ -36,4 +36,8 @@ launch -hfShot stress -hfWidgetFamily large -hfWidgetSlot 3 -hfOpen settings/wid
 launch -hfShot stress -hfWidgetFamily lockCircular -hfWidgetSlot 1 -hfOpen settings/widgets;    shot 23-widgets-lock-circular 6
 launch -hfShot stress -hfWidgetFamily lockRectangular -hfWidgetSlot 1 -hfOpen settings/widgets; shot 24-widgets-lock-rect 6
 launch -hfShot stress -hfWidgetFamily lockInline -hfWidgetSlot 1 -hfOpen settings/widgets;      shot 25-widgets-lock-inline 6
+# 3D-питомцы
+launch -hfShot stress -hfShotCharacter jelly -hfOpen companion; shot 26-pet3d-jelly 7
+launch -hfShot stress -hfShotCharacter kitty -hfOpen companion; shot 27-pet3d-kitty 7
+launch -hfShot stress -hfShotCharacter owl -hfOpen companion;   shot 28-pet3d-owl 7
 ls -1 "$OUT"
