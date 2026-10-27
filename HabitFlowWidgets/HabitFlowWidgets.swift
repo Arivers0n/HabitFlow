@@ -99,7 +99,7 @@ struct HabitFlowProvider: AppIntentTimelineProvider {
         let real = sample ? nil : WidgetShared.readSnapshot()
         let snapshot = real ?? WidgetSnapshot.sample()
         var pet: UIImage?
-        if let url = WidgetShared.petImageURL, snapshot.hasPetImage { pet = UIImage(contentsOfFile: url.path) }
+        if snapshot.hasPetImage, let data = WidgetShared.readPet() { pet = UIImage(data: data) }
         return HabitFlowEntry(date: .now, design: design, snapshot: snapshot, hasData: real != nil || sample, petImage: pet)
     }
 }

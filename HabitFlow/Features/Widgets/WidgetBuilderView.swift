@@ -113,8 +113,8 @@ struct WidgetBuilderView: View {
     }
 
     private var petImage: UIImage? {
-        guard snapshot.hasPetImage, let url = WidgetShared.petImageURL else { return nil }
-        return UIImage(contentsOfFile: url.path)
+        guard snapshot.hasPetImage, let data = WidgetShared.readPet() else { return nil }
+        return UIImage(data: data)
     }
 
     private var presetSection: some View {
@@ -204,7 +204,7 @@ struct WidgetBuilderView: View {
 
     private var linkSection: some View {
         Section {
-            LabeledContent("Общий доступ", value: store.hasAccess ? "есть" : "нет")
+            LabeledContent("Канал данных", value: WidgetShared.channel.title)
             if let group = WidgetShared.groupName {
                 LabeledContent("Группа", value: group)
             }
@@ -216,8 +216,8 @@ struct WidgetBuilderView: View {
             Text("Связь с виджетом")
         } footer: {
             Text(store.hasAccess
-                 ? "Виджет получает данные напрямую из приложения."
-                 : "Подпись не даёт приложению общий доступ (App Group), поэтому виджет не увидит ни дизайн, ни данные: он покажет пример с жёлтым значком. Конструктор при этом работает.")
+                 ? "Виджет получает дизайн и данные из приложения."
+                 : "Подпись не даёт приложению ни App Group, ни общую связку ключей, поэтому виджет не увидит ни дизайн, ни данные: он покажет пример с жёлтым значком. Конструктор при этом работает.")
         }
     }
 }

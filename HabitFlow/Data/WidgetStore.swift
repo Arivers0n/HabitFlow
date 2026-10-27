@@ -119,14 +119,13 @@ final class WidgetStore {
         WidgetCenter.shared.reloadAllTimelines()
     }
 
-    /// Кладёт уменьшенную картинку питомца в контейнер (расширению не нужен весь каталог картинок).
+    /// Кладёт уменьшенную картинку питомца в общий канал (расширению не нужен весь каталог картинок).
     private func syncPetImage(_ character: CompanionCharacter?) -> Bool {
-        guard WidgetShared.hasAccess, let character, let dest = WidgetShared.url(WidgetShared.petFile) else { return false }
+        guard WidgetShared.hasAccess, let character else { return false }
         let ud = UserDefaults.standard
-        let exists = FileManager.default.fileExists(atPath: dest.path)
-        if ud.string(forKey: Self.petKey) == character.id, exists { return true }
+        if ud.string(forKey: Self.petKey) == character.id, WidgetShared.readPet() != nil { return true }
         guard let image = UIImage(named: character.imageName) else {
-            try? FileManager.default.removeItem(at: dest)
+            WidgetShared.removePet()
             return false
         }
         let longest = max(image.size.width, image.size.height)
@@ -138,13 +137,8 @@ final class WidgetStore {
         let scaled = UIGraphicsImageRenderer(size: size, format: format).image { _ in
             image.draw(in: CGRect(origin: .zero, size: size))
         }
-        guard let png = scaled.pngData() else { return false }
-        do {
-            try png.write(to: dest, options: .atomic)
-            ud.set(character.id, forKey: Self.petKey)
-            return true
-        } catch {
-            return false
-        }
+        guard let png = scaled.pngData(), WidgetShared.writePet(png) else { return false }
+        ud.set(character.id, forKey: Self.petKey)
+        return true
     }
 }
