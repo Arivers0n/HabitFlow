@@ -58,8 +58,9 @@ final class TestMode {
     static func applyLaunchScenario() {
         guard let scenario = UserDefaults.standard.string(forKey: "hfShot"), !scenario.isEmpty else { return }
         let mgr = CompanionManager.shared
-        if mgr.state.characterID == nil {
-            mgr.state.characterID = UserDefaults.standard.string(forKey: "hfShotCharacter") ?? "dragon"
+        let forced = UserDefaults.standard.string(forKey: "hfShotCharacter")
+        if mgr.state.characterID == nil || forced != nil {
+            mgr.state.characterID = forced ?? "dragon"
             mgr.state.nickname = mgr.character?.name ?? ""
             mgr.state.userName = "Андрей"
             mgr.state.onboardingDone = true
