@@ -516,5 +516,112 @@ do {
     check(IdeaBank.next(shown: [], hasDeviceFeatures: false)?.needsDevice == false, "идеи: без устройства не предлагаем виджеты")
 }
 
+// MARK: Виджеты
+
+do {
+    // Пресеты: для любого размера дизайн непустой, в границах и без питомца на экране блокировки
+    for preset in WidgetPreset.allCases {
+        for f in WidgetFamilyKind.allCases {
+            let d = WidgetPresets.make(preset, for: f)
+            check(d.family == f && !d.blocks.isEmpty, "виджет: пресет \(preset.rawValue)/\(f.rawValue) не пустой")
+            check(d.blocks.count <= f.maxBlocks, "виджет: пресет \(preset.rawValue)/\(f.rawValue) помещается")
+            check(d == d.validated(), "виджет: пресет \(preset.rawValue)/\(f.rawValue) уже в границах")
+        }
+    }
+
+    // Набор по умолчанию: 6 слотов, во всех — все размеры, повторная проверка ничего не меняет
+    let set = WidgetConfigSet.makeDefault()
+    check(set.slots.count == 6 && set.slots.map(\.id) == [1, 2, 3, 4, 5, 6], "виджет: шесть слотов")
+    check(set.slots.allSatisfy { $0.designs.count == WidgetFamilyKind.allCases.count }, "виджет: в слоте дизайн для каждого размера")
+    check(set == set.validated(), "виджет: validated идемпотентна")
+
+    // Ограничения значений
+    var b = WidgetBlock(kind: .customText)
+    b.style.size = 500; b.style.opacity = 5; b.style.colorHex = "zzz"; b.style.lineLimit = 99; b.thickness = -4
+    b.accentHex = "#abc"; b.text = String(repeating: "я", count: 200); b.spaceAfter = .nan
+    let c = b.clamped()
+    check(c.style.size == 90 && c.style.opacity == 1 && c.style.lineLimit == 6, "виджет: размер, прозрачность, строки в границах")
+    check(c.style.colorHex == "FFFFFF", "виджет: плохой цвет → белый")
+    check(c.accentHex == "AABBCC", "виджет: #abc → AABBCC")
+    check(c.thickness == 2 && c.text.count == 80 && c.spaceAfter == 0, "виджет: толщина, длина текста, NaN")
+
+    // Лишние и неподходящие блоки
+    var d = WidgetDesign(name: "  Тест  ", family: .lockRectangular,
+                         blocks: [WidgetBlock(kind: .petImage), WidgetBlock(kind: .doneText), WidgetBlock(kind: .date),
+                                  WidgetBlock(kind: .greeting), WidgetBlock(kind: .phrase)])
+    d.padding = 999
+    let v = d.validated()
+    check(v.name == "Тест" && v.padding == 32, "виджет: имя обрезано, отступ в границах")
+    check(v.blocks.count == 3 && !v.blocks.contains { $0.kind == .petImage }, "виджет: на экране блокировки без питомца, не больше 3 блоков")
+
+    // Битый набор чинится: нет слотов, чужой номер, пустое имя
+    let broken = WidgetConfigSet(version: 99, slots: [WidgetSlot(id: 9, name: "лишний"), WidgetSlot(id: 2, name: "   ")])
+    let fixed = broken.validated()
+    check(fixed.slots.count == 6 && fixed.version == WidgetConfigSet.currentVersion, "виджет: битый набор → 6 слотов")
+    check(fixed.slot(2)?.name == "Виджет 2" && fixed.slot(9) == nil, "виджет: пустое имя заменено, лишний слот убран")
+    check(fixed.slot(2)?.designs.count == WidgetFamilyKind.allCases.count, "виджет: недостающие размеры заполнены")
+
+    // Кодирование туда и обратно (так хранится в контейнере и в бэкапе)
+    if let data = try? JSONEncoder().encode(set), let back = try? JSONDecoder().decode(WidgetConfigSet.self, from: data) {
+        check(back == set, "виджет: набор переживает JSON")
+    } else { check(false, "виджет: набор кодируется") }
+
+    // Цвета
+    let red = HexColor.rgb("#FF0000")
+    check(red.r == 1 && red.g == 0 && red.b == 0, "виджет: hex → rgb")
+    check(HexColor.rgb("мусор").r == 1, "виджет: мусор → белый")
+    check(HexColor.normalize("abc", fallback: "000000") == "AABBCC", "виджет: короткий hex")
+}
+
+do {
+    // Снимок из привычек. Сегодня понедельник 26.10.2026.
+    let water = HabitSnapshot(kind: .build, startDate: day(2026, 10, 15), checkIns: checks([day(2026, 10, 26, 9)]), name: "Вода")
+    let read = HabitSnapshot(kind: .build, startDate: day(2026, 10, 15), name: "Чтение")
+    let smoke = HabitSnapshot(kind: .quit, startDate: day(2026, 10, 16), name: "Курение")
+    let old = HabitSnapshot(kind: .build, startDate: day(2026, 10, 1), name: "Архивная", isArchived: true)
+    let builder = WidgetSnapshotBuilder(calendar: cal)
+    let snap = builder.make(habits: [water, read, smoke, old], userName: "Андрей", petName: "Бульк",
+                            phrase: "Привет", mood: .calm, now: now)
+
+    check(snap.scheduled == 2 && snap.scheduledDone == 1, "снимок: 1 из 2, архивная не считается (\(snap.scheduledDone)/\(snap.scheduled))")
+    check(snap.quits.count == 1 && snap.quits[0].days == 10 && snap.quits[0].name == "Курение", "снимок: отказ 10 дней")
+    check(snap.nextHabit == "Чтение", "снимок: следующая привычка — невыполненная")
+    check(snap.topBuild?.name == "Вода", "снимок: лучшая серия у «Воды»")
+    check(snap.week.count == 7 && snap.week[0] == .partial && snap.week[1] == .future, "снимок: неделя — пн частично, вт впереди")
+    check(snap.mood == "calm" && snap.level >= 1, "снимок: настроение и уровень")
+    check(snap.isFresh(now: now, calendar: cal) && !snap.isFresh(now: day(2026, 10, 27, 8), calendar: cal), "снимок: свежий только в свои сутки")
+
+    func val(_ k: WidgetBlockKind, _ s: WidgetSnapshot = snap, at t: Date = now) -> WidgetValue {
+        WidgetContent.value(for: WidgetBlock(kind: k), snapshot: s, now: t, calendar: cal)
+    }
+    check(val(.dayRing) == .ring(fraction: 0.5, center: "1/2", caption: "целей"), "содержимое: кольцо 1/2")
+    check(val(.doneText) == .text("1 из 2") && val(.percentText) == .text("50%"), "содержимое: «1 из 2» и 50%")
+    check(val(.bestQuit) == .stat(value: "10 дн.", caption: "без срыва: Курение"), "содержимое: серия без срыва")
+    check(val(.quitList) == .lines(["Курение · 10 дн."]), "содержимое: список отказов")
+    check(val(.nextHabit) == .stat(value: "Чтение", caption: "Дальше"), "содержимое: следующая привычка")
+    check(val(.greeting) == .text("Добрый вечер, Андрей"), "содержимое: приветствие вечером")
+    check(val(.customText) == .text("Мой текст"), "содержимое: пустой свой текст")
+    check(val(.date) == .text("пн, 26 октября"), "содержимое: дата по-русски (\(val(.date)))")
+    if case .dots(let dots) = val(.weekDots) { check(dots.count == 7, "содержимое: семь точек") } else { check(false, "содержимое: точки") }
+
+    // Снимок вчерашний: цели дня не показываем, дни без срыва догоняем
+    let later = day(2026, 10, 28, 18)
+    check(val(.doneText, snap, at: later) == .text("—"), "устаревший снимок: «—» вместо чисел дня")
+    check(val(.bestQuit, snap, at: later) == .stat(value: "12 дн.", caption: "без срыва: Курение"), "устаревший снимок: дни без срыва догнаны")
+    check(WidgetContent.plainText(val(.dayRing)) == "1/2", "содержимое: текст кольца")
+
+    // Пустые данные не ломают блоки
+    let empty = builder.make(habits: [], userName: "", petName: "", phrase: "", mood: .calm, now: now)
+    check(WidgetContent.value(for: WidgetBlock(kind: .bestQuit), snapshot: empty, now: now, calendar: cal) == .stat(value: "—", caption: "Нет отказов"), "пустой снимок: нет отказов")
+    check(WidgetContent.value(for: WidgetBlock(kind: .dayRing), snapshot: empty, now: now, calendar: cal) == .ring(fraction: 0, center: "—", caption: "Нет целей"), "пустой снимок: нет целей")
+    check(WidgetContent.value(for: WidgetBlock(kind: .greeting), snapshot: empty, now: now, calendar: cal) == .text("Добрый вечер"), "пустой снимок: приветствие без имени")
+
+    // JSON снимка (так он лежит в контейнере)
+    if let data = try? JSONEncoder().encode(snap), let back = try? JSONDecoder().decode(WidgetSnapshot.self, from: data) {
+        check(back == snap, "снимок переживает JSON")
+    } else { check(false, "снимок кодируется") }
+    check(WidgetSnapshot.sample(now: now, calendar: cal).week.count == 7, "снимок: пример для предпросмотра")
+}
+
 print(failures == 0 ? "✓ Все \(passed) проверок прошли" : "Провалено: \(failures), прошло: \(passed)")
 exit(failures == 0 ? 0 : 1)
