@@ -250,12 +250,13 @@ private struct FriendsEntry: View {
                                 ZStack {
                                     Circle().fill(Color(hex: c?.tintHex ?? "4C8DFF").opacity(0.3))
                                     if let c, m.stage > 0 {
-                                        Image(c.imageName).resizable().aspectRatio(contentMode: .fit).padding(4)
+                                        PetArtwork(character: c).padding(4)
                                     } else {
                                         Text(String(m.name.prefix(1))).font(.subheadline.weight(.bold))
                                     }
                                 }
                                 .frame(width: 40, height: 40)
+                                .clipShape(Circle())
                                 .overlay(Circle().strokeBorder(Color.black.opacity(0.25), lineWidth: 1))
                             }
                         }

@@ -215,7 +215,7 @@ private struct TypingBubble: View {
 
     var body: some View {
         HStack {
-            TimelineView(.animation(paused: !Motion.enabled)) { ctx in
+            TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !Motion.enabled)) { ctx in
                 let t = ctx.date.timeIntervalSinceReferenceDate
                 HStack(spacing: 5) {
                     ForEach(0..<3, id: \.self) { i in

@@ -355,7 +355,7 @@ struct WelcomeView: View {
 /// Анимированный знак приложения: кольцо с галочкой.
 struct AppMark: View {
     var body: some View {
-        TimelineView(.animation(paused: !Motion.enabled)) { ctx in
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !Motion.enabled)) { ctx in
             let t = ctx.date.timeIntervalSinceReferenceDate
             ZStack {
                 Circle()
@@ -382,7 +382,6 @@ struct AppMark: View {
 
 struct AccountSettingsView: View {
     @State private var confirmLogout = false
-    @State private var showLogin = false
 
     var body: some View {
         let sync = SyncEngine.shared

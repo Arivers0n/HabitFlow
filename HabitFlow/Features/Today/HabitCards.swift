@@ -192,13 +192,15 @@ struct QuitHabitCard: View {
         let ap = Appearance.shared
         let color = habit.color
         let compact = ap.s.density == .compact
+        // Снимок один на пересчёт карточки: внутри таймлайна меняется только «сейчас», а не данные.
+        let snap = habit.snapshot
 
         VStack(alignment: .leading, spacing: compact ? 10 : 14) {
             HStack(spacing: 12) {
                 HabitIcon(symbol: habit.symbol, color: color, size: compact ? 36 : 42)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(habit.name).font(.headline).lineLimit(1)
-                    let q = store.engine.quitStreak(habit.snapshot)
+                    let q = store.engine.quitStreak(snap)
                     Text(q.relapseCount == 0 ? "Без срывов с начала" : "Рекорд: \(DurationText.human(q.best))")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
@@ -207,12 +209,12 @@ struct QuitHabitCard: View {
             }
 
             TimelineView(.periodic(from: .now, by: ap.s.liveSeconds ? 1 : 30)) { ctx in
-                let q = store.engine.quitStreak(habit.snapshot, now: ctx.date)
+                let q = store.engine.quitStreak(snap, now: ctx.date)
                 VStack(alignment: .leading, spacing: 10) {
                     QuitCounter(seconds: q.current, color: color, showSeconds: ap.s.liveSeconds, big: !compact)
                     if !compact {
                         MilestoneBar(days: q.current / 86_400, color: color, record: q.isRecordNow)
-                        if ap.s.showSavings, let saving = savingsText(now: ctx.date) {
+                        if ap.s.showSavings, let saving = savingsText(snap, now: ctx.date) {
                             Label(saving, systemImage: "leaf.fill")
                                 .font(.footnote)
                                 .foregroundStyle(.secondary)
@@ -229,9 +231,9 @@ struct QuitHabitCard: View {
         .onTapGesture(perform: onOpen)
     }
 
-    private func savingsText(now: Date) -> String? {
+    private func savingsText(_ snap: HabitSnapshot, now: Date) -> String? {
         guard habit.baselinePerDay > 0 else { return nil }
-        let avoided = StatsEngine().avoidedUnits(habit.snapshot, baselinePerDay: habit.baselinePerDay, now: now)
+        let avoided = StatsEngine().avoidedUnits(snap, baselinePerDay: habit.baselinePerDay, now: now)
         let unit = habit.unitName.isEmpty ? "раз" : habit.unitName
         var text = "Избежал: \(NumberText.value(avoided.rounded(.down))) \(unit)"
         if habit.costPerUnit > 0 {

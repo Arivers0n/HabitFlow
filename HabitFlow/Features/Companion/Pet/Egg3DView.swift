@@ -22,9 +22,11 @@ struct Egg3DView: UIViewRepresentable {
         let v = EggSCNView(frame: .zero, options: nil)
         v.backgroundColor = .clear
         v.isOpaque = false
-        v.antialiasingMode = .multisampling4X
+        // Яйцо на экране — 128 pt при плотности 3×: 2× MSAA вместо 4× почти не видно, а заливки в 2 раза меньше.
+        v.antialiasingMode = .multisampling2X
         v.preferredFramesPerSecond = 60
-        v.rendersContinuously = true
+        // При «Уменьшении движения» сцена статична и перерисовывается только по событию (касание, вылупление).
+        v.rendersContinuously = Motion.enabled
         v.allowsCameraControl = false
         context.coordinator.setup(view: v, tintHex: tintHex, seed: seed, progress: progress, fill: fill)
         if interactive { context.coordinator.addGestures(to: v) }
@@ -150,7 +152,7 @@ final class EggCoordinator: NSObject, UIGestureRecognizerDelegate {
     // MARK: - Покачивание
 
     private func startIdle() {
-        guard !hatched else { return }
+        guard !hatched, Motion.enabled else { return }
         spin.removeAction(forKey: "spin")
         spin.runAction(.repeatForever(.rotateBy(x: 0, y: .pi * 2, z: 0, duration: 26)), forKey: "spin")
 

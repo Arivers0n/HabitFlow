@@ -106,10 +106,6 @@ final class SoundService {
         }
     }
 
-    func toggleRelax(_ scene: AmbientScene) {
-        if relaxScene == scene { stopRelax() } else { startRelax(scene, timerMinutes: nil) }
-    }
-
     func setSleepTimer(minutes: Int?) {
         timerTask?.cancel()
         guard relaxScene != nil, let minutes, minutes > 0 else { sleepTimerEnd = nil; return }

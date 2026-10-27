@@ -276,7 +276,6 @@ enum Motion {
     static var press: Animation? { enabled ? .spring(response: 0.28, dampingFraction: 0.62) : nil }
     static var smooth: Animation? { enabled ? .smooth(duration: 0.35) : nil }
     static var bouncy: Animation? { enabled ? .bouncy(duration: 0.5, extraBounce: 0.12) : nil }
-    static var slow: Animation? { enabled ? .easeInOut(duration: 0.8) : nil }
 }
 
 // MARK: - Тексты в выбранном тоне

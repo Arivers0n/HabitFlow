@@ -15,6 +15,8 @@ final class WidgetStore {
     private static let key = "widgets.configs"
     private static let customizedKey = "widgets.customized"
     private static let petKey = "widgets.petID"
+    /// Растёт, когда меняются сами картинки питомцев (иначе виджет показывал бы старую копию).
+    private static let petArtVersion = 2
 
     private(set) var configs: WidgetConfigSet
     private(set) var lastRefresh: Date?
@@ -68,10 +70,6 @@ final class WidgetStore {
         store(next.validated(), userEdit: true)
     }
 
-    func applyPreset(_ preset: WidgetPreset, slot id: Int, family: WidgetFamilyKind) {
-        update(WidgetPresets.make(preset, for: family), inSlot: id)
-    }
-
     /// Восстановление из копии или с другого устройства.
     func replaceAll(_ set: WidgetConfigSet) {
         store(set.validated(), userEdit: true)
@@ -123,7 +121,9 @@ final class WidgetStore {
     private func syncPetImage(_ character: CompanionCharacter?) -> Bool {
         guard WidgetShared.hasAccess, let character else { return false }
         let ud = UserDefaults.standard
-        if ud.string(forKey: Self.petKey) == character.id, WidgetShared.readPet() != nil { return true }
+        // Версия картинок в ключе: после чистки краёв PNG старая копия в общем канале обновится сама.
+        let stamp = "\(character.id)@\(Self.petArtVersion)"
+        if ud.string(forKey: Self.petKey) == stamp, WidgetShared.readPet() != nil { return true }
         guard let image = UIImage(named: character.imageName) else {
             WidgetShared.removePet()
             return false
@@ -138,7 +138,7 @@ final class WidgetStore {
             image.draw(in: CGRect(origin: .zero, size: size))
         }
         guard let png = scaled.pngData(), WidgetShared.writePet(png) else { return false }
-        ud.set(character.id, forKey: Self.petKey)
+        ud.set(stamp, forKey: Self.petKey)
         return true
     }
 }

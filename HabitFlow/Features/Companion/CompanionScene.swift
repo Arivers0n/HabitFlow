@@ -162,8 +162,13 @@ struct CompanionScene: View {
     private func islandLayer(g: SceneGeometry, t: Double) -> some View {
         let islandH: CGFloat = g.islandW * 0.5
         let islandCenter: CGFloat = g.islandY + g.islandW * 0.12
+        // Остров не меняется между кадрами: рисуем его в картинку один раз (запас в 14 pt — под свечение кольца),
+        // дальше двигается только готовая текстура, а не пересчитывается размытие.
         Island(tint: tint, stage: config.stage)
             .frame(width: g.islandW, height: islandH)
+            .padding(14)
+            .drawingGroup()
+            .padding(-14)
             .position(x: g.W / 2, y: islandCenter)
         DecorLayer(decor: config.decor, back: true, g: g, t: t, mood: config.mood)
     }
@@ -349,15 +354,15 @@ private struct PetBody: View {
     var body: some View {
         let pad: CGFloat = 0.16
         let lw = g.charW * (1 + 2 * pad), lh = g.charH * (1 + 2 * pad)
-        let image = Image(config.character.imageName)
-            .resizable()
-            .interpolation(.high)
-            .aspectRatio(contentMode: .fit)
+        // Картинка с чистыми краями (см. PetArtwork). Тень радиусом 10 поверх шейдера убрана:
+        // она заново размывала весь слой каждый кадр, свечение уже даёт задний круг сцены.
+        let image = PetArtwork(character: config.character)
             .frame(width: g.charW, height: g.charH)
 
         if Motion.enabled {
             let age = min(10, max(0, now.timeIntervalSince(sim.touchTime)))
-            let time = t.truncatingRemainder(dividingBy: 600)
+            // Период обёртки кратен периоду дыхания (2π/2.1 · 200), иначе раз в 10 минут фаза «прыгает».
+            let time = t.truncatingRemainder(dividingBy: 2 * Double.pi / 2.1 * 200)
             let squash = max(-0.3, min(0.35, sim.squash + squashExtra))
             let breathe: Double = asleep ? 1.6 : (config.mood == .happy ? 1.0 : 0.7)
             let tx = pad * g.charW + sim.touch.x * g.charW
@@ -373,10 +378,9 @@ private struct PetBody: View {
                                                          .float(Double(squash)), .float(time),
                                                          .float(breathe), .float(Double(pad))),
                                   maxSampleOffset: CGSize(width: lw * 0.25, height: lh * 0.3))
-                .shadow(color: tint.opacity(0.35), radius: 10)
                 .frame(width: g.charW, height: g.charH)
         } else {
-            image.shadow(color: tint.opacity(0.35), radius: 10)
+            image
         }
     }
 }
@@ -527,13 +531,11 @@ struct Island: View {
                         IslandBottom(topHeight: topH)
                             .stroke(LinearGradient(colors: [.white.opacity(0.25), .clear], startPoint: .top, endPoint: .bottom), lineWidth: 1)
                     )
-                // Верх — стеклянная площадка
+                // Верх — стеклянная площадка. Без .ultraThinMaterial: он каждый кадр заново размывал
+                // «подложку» под собой, а подложка (свечение сцены) пульсирует.
                 Ellipse()
-                    .fill(.ultraThinMaterial)
-                    .overlay(
-                        Ellipse().fill(LinearGradient(colors: [Color.white.opacity(scheme == .dark ? 0.22 : 0.5), tint.opacity(0.35)],
-                                                      startPoint: .top, endPoint: .bottom))
-                    )
+                    .fill(LinearGradient(colors: [Color.white.opacity(scheme == .dark ? 0.26 : 0.55), tint.opacity(0.38)],
+                                         startPoint: .top, endPoint: .bottom))
                     .overlay(Ellipse().strokeBorder(Color.white.opacity(0.45), lineWidth: 1.2))
                     .overlay(
                         Ellipse().fill(Color.white.opacity(0.35))
@@ -563,89 +565,6 @@ private struct IslandBottom: Shape {
         p.addQuadCurve(to: CGPoint(x: r.midX, y: r.maxY), control: CGPoint(x: r.minX + r.width * 0.14, y: r.maxY))
         p.addQuadCurve(to: CGPoint(x: r.maxX, y: y), control: CGPoint(x: r.maxX - r.width * 0.14, y: r.maxY))
         p.closeSubpath()
-        return p
-    }
-}
-
-// MARK: - Яйцо
-
-struct EggView: View {
-    var tint: Color
-    var progress: Double
-    var t: Double
-
-    var body: some View {
-        ZStack {
-            EggShape()
-                .fill(LinearGradient(colors: [Color.white.opacity(0.95), tint.opacity(0.85), tint],
-                                     startPoint: .topLeading, endPoint: .bottomTrailing))
-            EggShape()
-                .fill(RadialGradient(colors: [.white.opacity(0.55), .clear], center: UnitPoint(x: 0.35, y: 0.28),
-                                     startRadius: 0, endRadius: 60))
-            GeometryReader { g in
-                let w = g.size.width, h = g.size.height
-                ForEach(0..<4, id: \.self) { i in
-                    let pos = [(0.3, 0.55), (0.68, 0.42), (0.58, 0.72), (0.4, 0.3)][i]
-                    Circle().fill(Color.white.opacity(0.35))
-                        .frame(width: w * [0.18, 0.13, 0.15, 0.1][i])
-                        .position(x: w * pos.0, y: h * pos.1)
-                }
-                if progress > 0.45 {
-                    Crack(seed: 1).stroke(Color.black.opacity(0.45), style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
-                        .frame(width: w * 0.36, height: h * 0.14)
-                        .position(x: w * 0.42, y: h * 0.4)
-                }
-                if progress > 0.75 {
-                    Crack(seed: 2).stroke(Color.black.opacity(0.45), style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
-                        .frame(width: w * 0.3, height: h * 0.12)
-                        .position(x: w * 0.62, y: h * 0.58)
-                }
-            }
-            EggShape().strokeBorderLike(Color.white.opacity(0.5))
-        }
-        .shadow(color: tint.opacity(0.5), radius: 14)
-    }
-}
-
-struct EggShape: Shape {
-    func path(in r: CGRect) -> Path {
-        var p = Path()
-        let w = r.width, h = r.height
-        p.move(to: CGPoint(x: r.midX, y: r.minY))
-        p.addCurve(to: CGPoint(x: r.maxX, y: r.minY + h * 0.62),
-                   control1: CGPoint(x: r.minX + w * 0.86, y: r.minY),
-                   control2: CGPoint(x: r.maxX, y: r.minY + h * 0.36))
-        p.addCurve(to: CGPoint(x: r.midX, y: r.maxY),
-                   control1: CGPoint(x: r.maxX, y: r.minY + h * 0.86),
-                   control2: CGPoint(x: r.minX + w * 0.78, y: r.maxY))
-        p.addCurve(to: CGPoint(x: r.minX, y: r.minY + h * 0.62),
-                   control1: CGPoint(x: r.minX + w * 0.22, y: r.maxY),
-                   control2: CGPoint(x: r.minX, y: r.minY + h * 0.86))
-        p.addCurve(to: CGPoint(x: r.midX, y: r.minY),
-                   control1: CGPoint(x: r.minX, y: r.minY + h * 0.36),
-                   control2: CGPoint(x: r.minX + w * 0.14, y: r.minY))
-        p.closeSubpath()
-        return p
-    }
-}
-
-extension Shape {
-    func strokeBorderLike(_ color: Color) -> some View {
-        stroke(color, lineWidth: 1.2).padding(0.6)
-    }
-}
-
-private struct Crack: Shape {
-    var seed: Int
-    func path(in r: CGRect) -> Path {
-        var p = Path()
-        let pts: [(Double, Double)] = seed == 1
-            ? [(0, 0.5), (0.2, 0.1), (0.4, 0.8), (0.6, 0.2), (0.8, 0.9), (1, 0.4)]
-            : [(0, 0.3), (0.25, 0.9), (0.5, 0.2), (0.75, 0.85), (1, 0.5)]
-        for (i, pt) in pts.enumerated() {
-            let c = CGPoint(x: r.minX + r.width * pt.0, y: r.minY + r.height * pt.1)
-            if i == 0 { p.move(to: c) } else { p.addLine(to: c) }
-        }
         return p
     }
 }

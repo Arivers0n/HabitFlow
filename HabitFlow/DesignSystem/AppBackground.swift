@@ -60,32 +60,51 @@ struct AppBackground: View {
     }
 }
 
-/// Медленно плывущие цветные пятна. Без анимации, если движение выключено.
+/// Медленно плывущие цветные пятна (период ≈ 28 с). Без анимации, если движение выключено.
+///
+/// Раньше: `repeatForever` на частоте дисплея (до 120 Гц) + `.blur(60)` на весь экран. Под стеклянными
+/// карточками это заставляло GPU каждый кадр пересчитывать размытие фона под каждой карточкой.
+/// Теперь: пятна — радиальные градиенты (размытие не нужно), кадры — 15 в секунду. Движение медленнее
+/// ~8 pt/с, шаг на кадр меньше 1 pt, глазом разницы не видно, а нагрузка в разы ниже.
 private struct AuroraLayer: View {
     var accent: Color
     var dark: Bool
-    @State private var phase = false
 
     var body: some View {
-        GeometryReader { geo in
-            let w = geo.size.width, h = geo.size.height
-            ZStack {
-                blob(accent, d: w * 1.1).offset(x: phase ? -w * 0.25 : w * 0.05, y: phase ? -h * 0.32 : -h * 0.2)
-                blob(Color(hex: "2ECFC4"), d: w * 0.9).offset(x: phase ? w * 0.3 : w * 0.15, y: phase ? -h * 0.05 : -h * 0.18)
-                blob(Color(hex: "B65CFF"), d: w * 0.8).offset(x: phase ? -w * 0.1 : -w * 0.3, y: phase ? h * 0.3 : h * 0.15)
+        TimelineView(.animation(minimumInterval: 1.0 / 15.0, paused: !Motion.enabled)) { ctx in
+            let t = Motion.enabled ? ctx.date.timeIntervalSinceReferenceDate : 0
+            // 0 → 1 → 0, плавно в обе стороны (как раньше easeInOut + autoreverses)
+            let k = CGFloat((1 - cos(t * 2 * Double.pi / 28)) / 2)
+            GeometryReader { geo in
+                let w = geo.size.width, h = geo.size.height
+                ZStack {
+                    blob(accent, d: w * 1.1)
+                        .offset(x: mix(w * 0.05, -w * 0.25, k), y: mix(-h * 0.2, -h * 0.32, k))
+                    blob(Color(hex: "2ECFC4"), d: w * 0.9)
+                        .offset(x: mix(w * 0.15, w * 0.3, k), y: mix(-h * 0.18, -h * 0.05, k))
+                    blob(Color(hex: "B65CFF"), d: w * 0.8)
+                        .offset(x: mix(-w * 0.3, -w * 0.1, k), y: mix(h * 0.15, h * 0.3, k))
+                }
+                .frame(width: w, height: h)
+                .opacity(dark ? 0.55 : 0.35)
             }
-            .frame(width: w, height: h)
-            .blur(radius: 60)
-            .opacity(dark ? 0.55 : 0.35)
         }
         .allowsHitTesting(false)
-        .onAppear {
-            guard Motion.enabled else { return }
-            withAnimation(.easeInOut(duration: 14).repeatForever(autoreverses: true)) { phase = true }
-        }
     }
 
+    private func mix(_ a: CGFloat, _ b: CGFloat, _ k: CGFloat) -> CGFloat { a + (b - a) * k }
+
+    /// Мягкое пятно: плотная середина и плавный спад к краю — как размытый круг, но без фильтра размытия.
     private func blob(_ c: Color, d: CGFloat) -> some View {
-        Circle().fill(c).frame(width: d, height: d)
+        let r = d * 0.65
+        return Circle()
+            .fill(RadialGradient(
+                gradient: Gradient(stops: [
+                    Gradient.Stop(color: c, location: 0),
+                    Gradient.Stop(color: c.opacity(0.7), location: 0.4),
+                    Gradient.Stop(color: c.opacity(0), location: 1)
+                ]),
+                center: .center, startRadius: 0, endRadius: r))
+            .frame(width: r * 2, height: r * 2)
     }
 }

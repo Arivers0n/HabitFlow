@@ -305,7 +305,7 @@ private struct MemberRow: View {
                 ZStack {
                     Circle().fill(Color(hex: character?.tintHex ?? "4C8DFF").opacity(0.2))
                     if let character, member.stage > 0 {
-                        Image(character.imageName).resizable().aspectRatio(contentMode: .fit).padding(5)
+                        PetArtwork(character: character).padding(5)
                     } else if character != nil {
                         Text("🥚").font(.title2)
                     } else {
@@ -313,6 +313,7 @@ private struct MemberRow: View {
                     }
                 }
                 .frame(width: 48, height: 48)
+                .clipShape(Circle())
                 .symbolEffect(.bounce, value: bounce)
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {

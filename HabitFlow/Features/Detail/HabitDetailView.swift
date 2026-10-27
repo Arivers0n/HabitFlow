@@ -101,8 +101,10 @@ struct HabitDetailView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             } else {
+                // Снимок строится один раз, а не каждую секунду: данные между тиками не меняются.
+                let snap = habit.snapshot
                 TimelineView(.periodic(from: .now, by: 1)) { ctx in
-                    let q = store.engine.quitStreak(habit.snapshot, now: ctx.date)
+                    let q = store.engine.quitStreak(snap, now: ctx.date)
                     VStack(spacing: 8) {
                         QuitCounter(seconds: q.current, color: color, showSeconds: true)
                         Text(q.relapseCount == 0 ? "без срывов с начала" : "без срыва · рекорд \(DurationText.human(q.best))")

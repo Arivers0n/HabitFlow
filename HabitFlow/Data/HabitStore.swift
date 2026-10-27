@@ -132,8 +132,6 @@ final class HabitStore {
         return h
     }
 
-    func forgetUndo() { lastDeleted = nil }
-
     // MARK: - Отметки полезных привычек
 
     func value(of h: Habit, on day: Date = .now) -> Double {

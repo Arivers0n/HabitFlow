@@ -188,8 +188,10 @@ final class CompanionManager {
 
     func status(_ habits: [Habit], now: Date = .now) -> CompanionStatus? {
         guard let character else { return nil }
-        let snaps = habits.filter { !$0.isArchived }.map(\.snapshot)
-        let xp = engine.xp(habits.map(\.snapshot), now: now)
+        // Снимок каждой привычки строится один раз (раньше — дважды: для активных и для опыта по всем).
+        let everything = habits.map(\.snapshot)
+        let snaps = everything.filter { !$0.isArchived }
+        let xp = engine.xp(everything, now: now)
         let progress = LevelProgress(xp: xp.total)
         let hour = engine.calendar.component(.hour, from: now)
         return CompanionStatus(
@@ -279,8 +281,6 @@ final class CompanionManager {
         state.onboardingDone = true
     }
 
-    func isUnlocked(_ g: Gift, level: Int) -> Bool { g.level <= level }
-
     func toggleEquip(_ g: Gift) {
         switch g.kind {
         case .headwear: state.headwear = state.headwear == g.id ? nil : g.id
@@ -303,10 +303,6 @@ final class CompanionManager {
     /// Украшения островка, которые сейчас видны.
     func visibleDecor(level: Int) -> Set<String> {
         Set(GiftCatalog.unlocked(level: level).filter { $0.kind == .decor && !state.hiddenDecor.contains($0.id) }.map(\.id))
-    }
-
-    func reset() {
-        state = CompanionState()
     }
 
     private func persist() {

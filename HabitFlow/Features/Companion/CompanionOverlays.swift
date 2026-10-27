@@ -175,7 +175,7 @@ struct ResistView: View {
             // Напарник
             Group {
                 if let c = character {
-                    Image(c.imageName).resizable().aspectRatio(contentMode: .fit)
+                    PetArtwork(character: c, rim: false)
                 } else {
                     Image(systemName: "shield.lefthalf.filled").resizable().scaledToFit()
                         .foregroundStyle(Palette.success.gradient).padding(16)

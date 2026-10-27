@@ -58,7 +58,4 @@ final class MotionTracker {
         tilt.y += (raw.y - tilt.y) * k
         return tilt
     }
-
-    /// Запомнить текущее положение как нейтральное.
-    func recenter() { hasBase = false }
 }

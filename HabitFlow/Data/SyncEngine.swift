@@ -461,8 +461,6 @@ enum Tombstones {
         save(all.filter { !set.contains($0.cid) })
     }
 
-    static func removeOne(_ id: UUID) { remove([id.uuidString]) }
-
     private static func save(_ list: [Item]) {
         if let d = try? JSONEncoder().encode(list) { UserDefaults.standard.set(d, forKey: key) }
     }
