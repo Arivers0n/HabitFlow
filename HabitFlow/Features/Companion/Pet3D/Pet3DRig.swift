@@ -171,7 +171,6 @@ final class PetFaceRig {
         p.addQuadCurve(to: CGPoint(x: -0.78, y: -0.35), controlPoint: CGPoint(x: 0, y: 0.62))
         p.close()
         let s = SCNShape(path: p, extrusionDepth: 0.3)
-        s.flatness = 0.02
         return s
     }
 
@@ -184,7 +183,6 @@ final class PetFaceRig {
         p.addCurve(to: CGPoint(x: 0, y: -0.9), controlPoint1: CGPoint(x: 1, y: -0.2), controlPoint2: CGPoint(x: 0.6, y: -0.5))
         p.close()
         let s = SCNShape(path: p, extrusionDepth: 0.3)
-        s.flatness = 0.02
         return s
     }
 
@@ -204,7 +202,6 @@ final class PetFaceRig {
         p.addQuadCurve(to: CGPoint(x: -0.5, y: 0), controlPoint: CGPoint(x: 0, y: bottom))
         p.close()
         let g = SCNShape(path: p, extrusionDepth: 0.2)
-        g.flatness = 0.02
         g.firstMaterial = mouthMaterial
         mouthCache[key] = g
         return g
