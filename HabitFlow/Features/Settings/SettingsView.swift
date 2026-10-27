@@ -85,6 +85,9 @@ struct SettingsView: View {
                     NavigationLink { HealthSettingsView() } label: {
                         settingsRow("Здоровье", "heart.fill", Color(hex: "FF5FA2"))
                     }
+                    NavigationLink { WidgetBuilderView() } label: {
+                        settingsRow("Виджеты", "square.grid.2x2.fill", Color(hex: "AF52DE"))
+                    }
                     NavigationLink { QAView() } label: {
                         settingsRow("Проверка данных", "checkmark.shield.fill", Color(hex: "34C759"))
                     }
@@ -158,6 +161,7 @@ struct SettingsView: View {
                 case .sounds: SoundSettingsView()
                 case .health: HealthSettingsView()
                 case .qa: QAView()
+                case .widgets: WidgetBuilderView()
                 }
             }
             .fileImporter(isPresented: $importing, allowedContentTypes: [.json]) { result in

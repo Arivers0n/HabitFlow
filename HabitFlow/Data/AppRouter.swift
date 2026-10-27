@@ -23,7 +23,7 @@ final class AppRouter {
     var toast: String?
 
     /// Страницы настроек, которые можно открыть ссылкой.
-    enum SettingsPage: String, Hashable { case quickCards, sounds, health, qa }
+    enum SettingsPage: String, Hashable { case quickCards, sounds, health, qa, widgets }
 
     private init() {}
 
@@ -57,6 +57,7 @@ final class AppRouter {
         case "companion": tab = .companion
         case "chat": chat(about: nil)
         case "progress": tab = .progress
+        case "today": tab = .today
         case "cards": tab = .today; showCards = true
         case "review": tab = .progress; showReview = true
         case "relax": showRelax = true

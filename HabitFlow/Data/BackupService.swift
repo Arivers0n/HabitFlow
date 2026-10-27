@@ -10,6 +10,8 @@ enum BackupService {
         var version = 1
         var exportedAt: Date
         var habits: [HabitDTO]
+        /// Дизайны виджетов. Необязательное поле: копии без него читаются как раньше.
+        var widgets: WidgetConfigSet?
     }
 
     struct HabitDTO: Codable {
@@ -59,7 +61,8 @@ enum BackupService {
     }
 
     static func export(_ habits: [Habit]) throws -> URL {
-        let file = File(exportedAt: .now, habits: habits.map { dto($0) })
+        var file = File(exportedAt: .now, habits: habits.map { dto($0) })
+        if WidgetStore.shared.isCustomized { file.widgets = WidgetStore.shared.configs }
         let enc = JSONEncoder()
         enc.dateEncodingStrategy = .iso8601
         enc.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -138,6 +141,8 @@ enum BackupService {
             NotificationService.sync(h)
             added += 1
         }
+        // Дизайны виджетов из копии ставим, только если на этом устройстве их ещё не меняли.
+        if let w = file.widgets, !WidgetStore.shared.isCustomized { WidgetStore.shared.replaceAll(w) }
         try context.save()
         SyncEngine.shared.schedulePush()
         return added

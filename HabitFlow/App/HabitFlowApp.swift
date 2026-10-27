@@ -220,6 +220,7 @@ struct RootView: View {
             }
             guard !isTest else { return }
             companion.registerOpen()
+            store.refreshWidgets()
             if let level = status?.level { companion.checkLevel(level) }
             if let p = SceneDelegate.pending { SceneDelegate.pending = nil; SceneDelegate.open(p) }
             HabitFlowShortcuts.updateAppShortcutParameters()
@@ -228,8 +229,10 @@ struct RootView: View {
             Task { await startupSync() }
         }
         .onChange(of: phase) { _, p in
+            if p == .background, !isTest { store.refreshWidgets() }
             guard p == .active, !isTest else { return }
             companion.registerOpen()
+            store.refreshWidgets()
             store.checkAllMilestones(habits)
             HabitFlowShortcuts.updateAppShortcutParameters()
             Task { await QuickCardsService.shared.reschedule(habits: allHabits) }

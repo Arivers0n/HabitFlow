@@ -40,6 +40,13 @@ targets:
         CFBundleURLTypes:
           - CFBundleURLName: com.ariverson.habitflow
             CFBundleURLSchemes: [habitflow]
+    entitlements:
+      path: HabitFlow/HabitFlow.entitlements
+      properties:
+        com.apple.security.application-groups: [group.com.ariverson.habitflow]
+    dependencies:
+      - target: HabitFlowWidgets
+        embed: true
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.ariverson.habitflow
@@ -50,3 +57,35 @@ targets:
         ASSETCATALOG_COMPILER_INCLUDE_ALL_APPICON_ASSETS: YES
         ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: "AppIcon-Emerald AppIcon-Amethyst AppIcon-Ocean AppIcon-Sunset AppIcon-Neon AppIcon-Autumn AppIcon-Winter AppIcon-Mono AppIcon-Light AppIcon-Bronze AppIcon-Silver AppIcon-Gold AppIcon-Diamond"
         ENABLE_PREVIEWS: YES
+
+  HabitFlowWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: HabitFlowWidgets
+        excludes:
+          - Info.plist
+          - HabitFlowWidgets.entitlements
+      - path: HabitFlow/Domain
+      - path: HabitFlow/Data/WidgetStorage.swift
+      - path: HabitFlow/DesignSystem/WidgetRenderer.swift
+    info:
+      path: HabitFlowWidgets/Info.plist
+      properties:
+        CFBundleDisplayName: HabitFlow
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        CFBundleDevelopmentRegion: ru
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: HabitFlowWidgets/HabitFlowWidgets.entitlements
+      properties:
+        com.apple.security.application-groups: [group.com.ariverson.habitflow]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.ariverson.habitflow.widgets
+        PRODUCT_NAME: HabitFlowWidgets
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SKIP_INSTALL: "YES"
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks @executable_path/../../Frameworks"

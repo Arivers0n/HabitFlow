@@ -23,6 +23,7 @@ enum PrefSync {
         _ = CompanionManager.shared
         _ = Appearance.shared
         _ = TriggerLibrary.shared
+        _ = WidgetStore.shared
     }
 
     static func markChanged(_ key: String) {

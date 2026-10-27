@@ -29,4 +29,11 @@ launch -hfShot stress -hfOpen settings/health;  shot 16-settings-health 6
 launch -hfShot stress -hfOpen settings/qa;      shot 17-settings-qa 6
 launch -hfShot stress -hfOpen review;           shot 18-review 6
 launch -hfShot stress -hfOpen relax;            shot 19-relax 6
+# Конструктор виджетов: по снимку на размер (рабочий стол и экран блокировки)
+launch -hfShot stress -hfWidgetFamily small -hfWidgetSlot 1 -hfOpen settings/widgets;           shot 20-widgets-small 6
+launch -hfShot stress -hfWidgetFamily medium -hfWidgetSlot 2 -hfOpen settings/widgets;          shot 21-widgets-medium 6
+launch -hfShot stress -hfWidgetFamily large -hfWidgetSlot 3 -hfOpen settings/widgets;           shot 22-widgets-large 6
+launch -hfShot stress -hfWidgetFamily lockCircular -hfWidgetSlot 1 -hfOpen settings/widgets;    shot 23-widgets-lock-circular 6
+launch -hfShot stress -hfWidgetFamily lockRectangular -hfWidgetSlot 1 -hfOpen settings/widgets; shot 24-widgets-lock-rect 6
+launch -hfShot stress -hfWidgetFamily lockInline -hfWidgetSlot 1 -hfOpen settings/widgets;      shot 25-widgets-lock-inline 6
 ls -1 "$OUT"

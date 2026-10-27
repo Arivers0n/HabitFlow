@@ -66,6 +66,10 @@ jobs:
           ls -lh HabitFlow.ipa
           size=$(stat -f%z HabitFlow.ipa)
           if [ "$size" -lt 300000 ]; then echo "ipa подозрительно маленький: $size байт"; exit 1; fi
+          test -d Payload/HabitFlow.app/PlugIns/HabitFlowWidgets.appex || { echo "Расширение виджетов не попало в сборку"; exit 1; }
+          echo "Расширение виджетов: $(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' Payload/HabitFlow.app/PlugIns/HabitFlowWidgets.appex/Info.plist)"
+          echo "Права (xcent), которые Xcode подготовил для подписи:"
+          find build -name "*.xcent" -exec sh -c 'echo "-- $1"; cat "$1"' _ {} \; 2>/dev/null | head -40 || true
           n=$(/usr/libexec/PlistBuddy -c "Print :CFBundleIcons:CFBundleAlternateIcons" Payload/HabitFlow.app/Info.plist | grep -c "AppIcon-" || true)
           echo "Альтернативных иконок: $n"
           if [ "$n" -lt 13 ]; then echo "Альтернативные иконки не попали в сборку"; exit 1; fi

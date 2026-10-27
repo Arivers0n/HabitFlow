@@ -32,7 +32,16 @@ final class HabitStore {
 
     func save() {
         do { try context.save() } catch { print("Ошибка сохранения: \(error)") }
-        if !isTest { SyncEngine.shared.schedulePush() }
+        if !isTest {
+            SyncEngine.shared.schedulePush()
+            WidgetStore.shared.scheduleRefresh(context: context)
+        }
+    }
+
+    /// Пересчитать данные виджетов (вход в приложение, выход из него).
+    func refreshWidgets() {
+        guard !isTest else { return }
+        WidgetStore.shared.scheduleRefresh(context: context)
     }
 
     /// Удаление с отметкой для сервера: на других устройствах запись тоже исчезнет.
