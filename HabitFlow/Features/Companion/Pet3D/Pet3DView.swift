@@ -64,6 +64,19 @@ final class Pet3DCoordinator {
 /// Сцена для питомца: камера, свет, окружение. Общая для экрана и для снимков.
 @MainActor
 enum Pet3DStage {
+    /// Куда смотрит камера. Ниже, чем у яйца: ближний к камере край основания из-за перспективы
+    /// уезжает вниз, и без запаса его срезает нижний край кадра.
+    static func centerY(fill: CGFloat) -> Double {
+        let half = 1.0 / Double(max(0.2, fill))
+        return 0.85 + (half - 1.0) * 0.6
+    }
+
+    /// Доля высоты кадра от нижнего края до основания питомца.
+    static func bottomFraction(fill: CGFloat) -> CGFloat {
+        let half = 1.0 / Double(max(0.2, fill))
+        return CGFloat((half - centerY(fill: fill)) / (2 * half))
+    }
+
     static func build(characterID: String, tintHex: String, fill: CGFloat) -> (scene: SCNScene, rig: PetRig) {
         let scene = SCNScene()
         scene.background.contents = UIColor.clear
@@ -77,7 +90,7 @@ enum Pet3DStage {
         cam.zFar = 100
         let half = 1.0 / Double(max(0.2, fill))
         let distance = half / tan(15 * Double.pi / 180)
-        let centerY = 1 + (half - 1.0) * 0.6
+        let centerY = Pet3DStage.centerY(fill: fill)
         let camNode = SCNNode()
         camNode.camera = cam
         camNode.position = v3(0, centerY, distance)

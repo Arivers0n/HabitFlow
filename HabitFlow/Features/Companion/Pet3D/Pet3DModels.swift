@@ -33,7 +33,7 @@ enum PetModels {
         rig.head.addChildNode(body)
 
         // Лужица под телом — сжимается вместе с корпусом
-        let puddleMat = PetMat.make(shade(tint, light: 0.2), rough: 0.2, clear: 1)
+        let puddleMat = PetMat.make(deep(tint, 0.12), rough: 0.5)
         let puddle = PetMat.node(SCNCylinder(radius: 1.12, height: 0.05), puddleMat, at: v3(0, 0.025, 0))
         rig.squash.addChildNode(puddle)
 
@@ -88,7 +88,7 @@ enum PetModels {
         rig.head.position = v3(0, 0.88, 0)
 
         let fur = PetMat.make(tint, rough: 0.82)
-        let light = PetMat.make(shade(tint, light: 0.7), rough: 0.85)
+        let light = PetMat.make(shade(tint, light: 0.55), rough: 0.9)
         let dark = PetMat.make(deep(tint, 0.3), rough: 0.8)
         let pink = PetMat.make(UIColor(red: 1, green: 0.62, blue: 0.70, alpha: 1), rough: 0.6)
 
@@ -190,6 +190,7 @@ enum PetModels {
         let belly = PetMat.make(shade(tint, light: 0.62), rough: 0.85)
         let dark = PetMat.make(deep(tint, 0.35), rough: 0.8)
         let amber = PetMat.make(UIColor(red: 1.0, green: 0.68, blue: 0.20, alpha: 1), rough: 0.5)
+        let wingMat = PetMat.make(deep(tint, 0.15), rough: 0.8)
 
         rig.head.addChildNode(PetMat.sphere(feather, at: SCNVector3Zero, scale: v3(spec.rx, spec.ry, spec.rz), segments: 56))
 
@@ -242,8 +243,8 @@ enum PetModels {
         var wings: [SCNNode] = []
         for side in [-1.0, 1.0] {
             let shoulder = SCNNode()
-            shoulder.position = v3(side * 0.84, 0.25, -0.02)
-            shoulder.addChildNode(PetMat.sphere(dark, at: v3(side * 0.05, -0.38, 0), scale: v3(0.17, 0.55, 0.38), segments: 32))
+            shoulder.position = v3(side * 0.76, 0.3, -0.02)
+            shoulder.addChildNode(PetMat.sphere(wingMat, at: v3(side * 0.03, -0.34, 0), scale: v3(0.15, 0.5, 0.34), segments: 32))
             rig.head.addChildNode(shoulder)
             wings.append(shoulder)
         }
@@ -255,7 +256,7 @@ enum PetModels {
 
         rig.extras = { pose, face, excitement, _ in
             let flap = excitement * (0.35 + 0.35 * sin(pose.time * 15))
-            let rest = 0.12 + sin(pose.time * 1.1) * 0.02
+            let rest = 0.05 + sin(pose.time * 1.1) * 0.02
             for (i, w) in wings.enumerated() {
                 let side = i == 0 ? -1.0 : 1.0
                 w.eulerAngles = v3(0, 0, side * (rest + max(0, flap)))

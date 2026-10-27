@@ -200,7 +200,7 @@ struct CompanionScene: View {
             // Настоящая 3D-модель: масштаб, крен и оборот делает сам SceneKit, SwiftUI только ставит её на островок.
             let fill: CGFloat = 0.8
             let side = g.charH / fill
-            let bottom = EggArt.bottomFraction(fill: fill)
+            let bottom = Pet3DStage.bottomFraction(fill: fill)
             Pet3DView(characterID: config.character.id, tintHex: config.character.tintHex,
                       pose: pose3D(t: t, now: now, m: m, tilt: tilt, asleep: asleep), fill: fill)
                 .frame(width: side, height: side)

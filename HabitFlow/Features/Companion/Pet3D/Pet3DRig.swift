@@ -93,7 +93,9 @@ final class PetFaceRig {
 
     init(spec: PetFaceSpec) {
         self.spec = spec
-        mouthMaterial = PetMat.make(UIColor(red: 0.30, green: 0.08, blue: 0.14, alpha: 1), rough: 0.6)
+        mouthMaterial = SCNMaterial()
+        mouthMaterial.lightingModel = .constant
+        mouthMaterial.diffuse.contents = UIColor(red: 0.30, green: 0.08, blue: 0.14, alpha: 1)
         mouthMaterial.isDoubleSided = true
         let ink = PetMat.make(spec.ink, rough: 0.12, clear: 1)
         let white = SCNMaterial()
