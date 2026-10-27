@@ -5,7 +5,7 @@
 ## Среда и ограничения
 - У владельца **нет Mac**. Сборка только через GitHub Actions (macOS-раннер), результат — неподписанный `HabitFlow.ipa`, который он подписывает в ESign и ставит на iPhone 16 Pro Max / iPad.
 - `main` → сборка + релиз `latest` (HabitFlow.ipa). `dev` → сборка + скриншоты симулятора, без релиза.
-- Локально на Linux можно проверить только чистый домен: `swiftc HabitFlow/Domain/*.swift Tests/DomainTests/main.swift -o /tmp/t && /tmp/t` (сейчас 61 проверка, все зелёные). SwiftUI/SwiftData локально не собрать — любую правку проверять сборкой в CI.
+- Локально на Linux можно проверить только чистый домен: `swiftc HabitFlow/Domain/*.swift Tests/DomainTests/main.swift -o /tmp/t && /tmp/t` (сейчас 159 проверок, все зелёные). SwiftUI/SwiftData локально не собрать — любую правку проверять сборкой в CI.
 - Проект генерируется XcodeGen из `project.yml` (iOS 17+, SwiftUI + SwiftData + Observation, bundle `com.ariverson.habitflow`, схема URL `habitflow://`, версия 1.1 build 2).
 - Подводный камень компилятора Swift: сложные выражения во View → «unable to type-check in reasonable time». Дробить на маленькие типизированные куски.
 
@@ -42,3 +42,10 @@
 - Правки → `git push origin dev` → смотреть Actions и скриншоты → когда зелёное, мёржить в `main`.
 - Не ломать обратную совместимость бэкапа (BackupService) и SwiftData-моделей: новые поля только с значением по умолчанию.
 - Сначала описать план пользователю, потом писать код; результат показывать скриншотами из CI.
+
+## Интеллектуальное ядро (добавлено)
+- Domain: HealthAdvice (сон/вода/шаги → советы), ConsistencyChecker (QA: коды H/G/S/D/C/K/R/T/X/L/V), QuickCards (колода ≤5 карточек, время пуша по медиане последних отметок − 30 мин; отметки задним числом в 12:00:00 не считаются), WeeklyReview (офлайн-разбор), PersonaPrompt + ReplyPolish (канал phone/watch, чистка markdown, «Что скажешь?»), SoundDesign (синтез звуков и фонов без файлов), IdeaBank.
+- Data: HealthService (HealthKit только по нажатию; перед запросом ищется строка права в исполняемом файле — без права вместо падения «Недоступно» + ручной ввод сна), SoundService (ambient для коротких звуков, playback+mixWithOthers для релакса, таймер сна), QuickCardsService (категория уведомлений hf.quickcards, «через 30 минут», разбор недели по воскресеньям 19:00), QAService, WatchLink (WCSession; приложения для часов в проекте нет).
+- Ссылки: habitflow://cards, //review, //relax, //settings/{quickCards|sounds|health|qa}.
+- Единый подсчёт целей дня: CompanionEngine.summary(...).scheduled/scheduledDone — кольцо, «X из Y», WeekStrip и фразы берут числа оттуда.
+- Не проверено на устройстве: HealthKit через ESign (скорее всего недоступен), звук/релакс в фоне, уведомления карточек. Будильники и экранное время приложениям недоступны.

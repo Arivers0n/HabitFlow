@@ -79,7 +79,7 @@ struct WeeklyReviewSheet: View {
                     .padding(16)
             }
             .background(AppBackground())
-            .navigationTitle("Разбор недели")
+            .navigationTitle("Итоги")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) { Button("Готово") { dismiss() } }
