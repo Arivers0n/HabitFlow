@@ -14,54 +14,58 @@ extension EnvironmentValues {
     }
 }
 
-// MARK: - Карточка на «Сегодня»
+// MARK: - Компактная строка напарника на «Сегодня»
 
-/// Живая карточка напарника вверху главного экрана: сцена, фраза, опыт и просьба-квест.
+/// Тонкая строка напарника: маленький аватар, имя, уровень, одна фраза и полоска опыта.
+/// Без сцены и шейдеров — на главном экране питомец не двигается и почти не занимает места;
+/// полноценный питомец живёт на своей вкладке (тап по строке открывает её).
 struct CompanionCard: View {
     @Environment(HabitStore.self) private var store
     @Environment(\.openCompanionTab) private var openTab
     @Query private var all: [Habit]
 
-    @State private var tapLine: String?
     @State private var gain: Int?
 
     var body: some View {
         let mgr = CompanionManager.shared
         if let s = mgr.status(all) {
             let tint = Color(hex: s.character.tintHex)
-            HStack(alignment: .center, spacing: 10) {
-                CompanionScene(config: .from(s), size: 128, onTap: { react() })
-                    .padding(.leading, -6)
-
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack(spacing: 6) {
-                        Text(mgr.displayName).font(.headline).lineLimit(1)
-                        LevelChip(level: s.level, tint: tint)
-                        Spacer(minLength: 0)
-                        Button(action: openTab) {
-                            Image(systemName: "chevron.right")
-                                .font(.footnote.weight(.bold))
+            VStack(alignment: .leading, spacing: 10) {
+                Button {
+                    Haptics.tap()
+                    openTab()
+                } label: {
+                    HStack(spacing: 12) {
+                        avatar(s.character, tint: tint)
+                        VStack(alignment: .leading, spacing: 5) {
+                            HStack(spacing: 6) {
+                                Text(mgr.displayName).font(.subheadline.weight(.semibold)).lineLimit(1)
+                                LevelChip(level: s.level, tint: tint)
+                            }
+                            Text(mgr.phrase(for: s))
+                                .font(.footnote)
                                 .foregroundStyle(.secondary)
-                                .frame(width: 32, height: 32)
+                                .lineLimit(2)
+                                .multilineTextAlignment(.leading)
                         }
-                        .buttonStyle(PressableStyle())
-                        .accessibilityLabel("Открыть напарника")
+                        Spacer(minLength: 0)
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.tertiary)
                     }
-                    SpeechBubble(text: tapLine ?? mgr.phrase(for: s))
-                        .onTapGesture {
-                            withAnimation(Motion.smooth) { tapLine = nil; mgr.nextPhrase() }
-                            Haptics.selection()
-                        }
-                    XPBar(progress: s.progress, tint: tint, compact: true)
-                    if s.mood != .caring, let quest = questHabit(s) {
-                        QuestButton(habit: quest, tint: tint)
-                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(PressableStyle(scale: 0.98))
+                .accessibilityLabel("Открыть напарника")
+
+                XPBar(progress: s.progress, tint: tint, compact: true)
+
+                if s.mood != .caring, let quest = questHabit(s) {
+                    QuestButton(habit: quest, tint: tint)
                 }
             }
-            .padding(.vertical, 10)
-            .padding(.trailing, 14)
-            .padding(.leading, 6)
-            .card(radius: 28, tint: tint)
+            .padding(14)
+            .card(radius: 24, tint: tint)
             .overlay(alignment: .topTrailing) {
                 if let gain {
                     Text("+\(gain) XP")
@@ -70,7 +74,6 @@ struct CompanionCard: View {
                         .padding(.horizontal, 10)
                         .padding(.vertical, 5)
                         .background(Capsule().fill(tint.gradient))
-                        .shadow(color: tint.opacity(0.5), radius: 6)
                         .padding(10)
                         .transition(.asymmetric(insertion: .scale.combined(with: .opacity),
                                                 removal: .move(edge: .top).combined(with: .opacity)))
@@ -82,18 +85,18 @@ struct CompanionCard: View {
         }
     }
 
+    private func avatar(_ character: CompanionCharacter, tint: Color) -> some View {
+        PetArtwork(character: character)
+            .padding(5)
+            .frame(width: 52, height: 52)
+            .background(Circle().fill(tint.opacity(0.16)))
+            .clipShape(Circle())
+    }
+
     private func questHabit(_ s: CompanionStatus) -> Habit? {
         guard let q = s.quest else { return nil }
         return all.first { !$0.isArchived && $0.kind == .build && $0.name == q.name
             && !store.engine.isDone(store.value(of: $0), goal: $0.goal) }
-    }
-
-    private func react() {
-        withAnimation(Motion.smooth) { tapLine = CompanionPhrases.tapLine(seed: Int.random(in: 0..<100)) }
-        Task {
-            try? await Task.sleep(for: .seconds(2))
-            withAnimation(Motion.smooth) { tapLine = nil }
-        }
     }
 
     private func showGain(_ n: Int) {

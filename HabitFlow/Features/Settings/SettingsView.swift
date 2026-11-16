@@ -217,7 +217,7 @@ struct HomeSettingsView: View {
         @Bindable var ap = Appearance.shared
         Form {
             Section {
-                Toggle("Напарник", isOn: Binding(get: { CompanionManager.shared.state.showOnToday },
+                Toggle("Показывать питомца", isOn: Binding(get: { CompanionManager.shared.state.showOnToday },
                                                  set: { CompanionManager.shared.state.showOnToday = $0 }))
                 Toggle("Сводка дня", isOn: $ap.s.showSummary)
                 Toggle("Полоска недели", isOn: $ap.s.showWeekStrip)

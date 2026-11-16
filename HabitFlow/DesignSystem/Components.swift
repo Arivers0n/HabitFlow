@@ -124,20 +124,18 @@ struct HabitIcon: View {
 
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: size * 0.3, style: .continuous)
-                .fill(LinearGradient(colors: [color.opacity(0.95), color.opacity(0.6)],
-                                     startPoint: .topLeading, endPoint: .bottomTrailing))
+            RoundedRectangle(cornerRadius: size * 0.32, style: .continuous)
+                .fill(color.opacity(0.18))
             if symbol.isSingleEmoji {
                 Text(symbol).font(.system(size: size * 0.52))
             } else {
                 Image(systemName: symbol)
                     .font(.system(size: size * 0.44, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(color)
                     .symbolRenderingMode(.hierarchical)
             }
         }
         .frame(width: size, height: size)
-        .shadow(color: color.opacity(0.35), radius: size * 0.18, y: size * 0.08)
     }
 }
 

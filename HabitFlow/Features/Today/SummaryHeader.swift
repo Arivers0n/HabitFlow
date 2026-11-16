@@ -17,37 +17,42 @@ struct SummaryHeader: View {
         let accent = Appearance.shared.accent
         let bestQuit = quit.map { engine.quitStreak($0.snapshot) }.max { $0.current < $1.current }
 
-        HStack(spacing: 18) {
-            ZStack {
-                ProgressRing(progress: ratio, color: accent, lineWidth: 9)
-                VStack(spacing: 0) {
-                    Text("\(Int((ratio * 100).rounded()))%")
-                        .font(.title3.weight(.bold))
-                        .monospacedDigit()
-                        .contentTransition(.numericText())
-                    Text("дня").font(.caption2).foregroundStyle(.secondary)
-                }
-            }
-            .frame(width: 78, height: 78)
-            .animation(Motion.bouncy, value: ratio)
-
+        HStack(alignment: .center, spacing: 16) {
             VStack(alignment: .leading, spacing: 6) {
                 Text(Copy.greeting)
-                    .font(.subheadline)
+                    .font(.subheadline.weight(.medium))
                     .foregroundStyle(.secondary)
                 Text(headline(done: done, due: dueCount))
-                    .font(.headline)
+                    .font(.title2.weight(.bold))
                     .fixedSize(horizontal: false, vertical: true)
                 if let q = bestQuit, q.current > 3_600 {
                     Label(Copy.cleanFor(DurationText.human(q.current)), systemImage: "shield.lefthalf.filled")
-                        .font(.footnote)
+                        .font(.footnote.weight(.medium))
                         .foregroundStyle(.secondary)
+                        .padding(.top, 2)
                 }
             }
             Spacer(minLength: 0)
+            ZStack {
+                ProgressRing(progress: ratio, color: accent, lineWidth: 10)
+                VStack(spacing: 0) {
+                    Text("\(Int((ratio * 100).rounded()))%")
+                        .font(.headline.weight(.bold))
+                        .monospacedDigit()
+                        .contentTransition(.numericText())
+                    if dueCount > 0 {
+                        Text("\(done)/\(dueCount)")
+                            .font(.caption2.weight(.medium))
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .frame(width: 84, height: 84)
+            .animation(Motion.bouncy, value: ratio)
         }
-        .padding(18)
-        .card(radius: 28)
+        .padding(20)
+        .card(radius: 30, tint: accent)
     }
 
     private func headline(done: Int, due: Int) -> String {

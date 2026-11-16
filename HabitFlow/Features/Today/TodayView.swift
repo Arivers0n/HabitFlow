@@ -84,16 +84,16 @@ struct TodayView: View {
     @ViewBuilder
     private var headerBlocks: some View {
         let ap = Appearance.shared
-        if CompanionManager.shared.hasCompanion && CompanionManager.shared.state.showOnToday {
-            CompanionCard()
-        }
-        HealthTipCard()
         if ap.s.showSummary {
             SummaryHeader(build: build, quit: quit, day: selectedDay)
         }
         if ap.s.showWeekStrip && !build.isEmpty {
             WeekStrip(habits: build, selected: $selectedDay)
         }
+        if CompanionManager.shared.hasCompanion && CompanionManager.shared.state.showOnToday {
+            CompanionCard()
+        }
+        HealthTipCard()
     }
 
     private func habitList(withHeader: Bool) -> some View {
