@@ -68,3 +68,15 @@
 - Реакции на события: `CompanionManager.react(_:)` (привычка выполнена / все цели дня / срыв / «устоял» / уровень) — подпрыгивание у всех питомцев и мимика у 3D. Снимки CI: 26–28 (`-hfShotCharacter jelly|kitty|owl`).
 - Не проверено на устройстве: вид и нагрузка SceneKit-питомцев на телефоне, лицо на разных наклонах, `Pet3DSnapshot` с прозрачным фоном (аватарки/виджет).
 - Мелочи аудита, оставшиеся в бэклоге: `HealthService.refresh` без троттлинга при каждом показе «Сегодня»; размытия декора (костёр/лампа/луна) внутри таймлайна; `MotionTracker.step` на каждую сцену; `sim.step` в теле вида; `waterBoost`/`isSilent` только в тестах; `TimelineView(.periodic 0.2)` в ResistView; `build/quit` пересчитываются в теле TodayView.
+
+## Скилы (skills.sh, добавлено)
+Установлены в `.claude/skills/` (версии зафиксированы в `skills-lock.json`; восстановить: `npx skills install`). Искать новые: скилл `find-skills` / `npx skills find <запрос>`.
+- `swiftui-pro`, `swiftui-performance-audit` — ревью SwiftUI-кода и производительности (Today, виджет-конструктор, питомцы, шейдеры).
+- `swiftdata-pro` — модели/запросы SwiftData; помнить правило: новые поля только со значением по умолчанию, бэкап не ломать.
+- `swift-concurrency-pro` — async/actors/Sendable (SyncEngine, AIService, QuickCardsService, HealthService).
+- `widgetkit`, `activitykit` — виджеты и Live Activity (счётчик «без срыва» из бэклога).
+- `scenekit` — 3D-яйцо и бэклог «настоящие 3D-питомцы».
+- `healthkit` — HealthService (право только через ESign, см. «не проверено»).
+- `mobile-ios-design` — HIG-ориентиры для UI.
+- `github-actions-efficiency`, `github-actions-hardening` — ускорение и безопасность `build.yml`/`screenshots.yml` (macOS-минуты).
+- Применять скил перед правкой в его области; чужие рекомендации не обязательны, если противоречат архитектуре выше (логика в Domain/Data, UI тонкий, iOS 17+, сборка только через CI).
